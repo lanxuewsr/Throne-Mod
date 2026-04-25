@@ -685,6 +685,18 @@ void MainWindow::profile_start(int _id) {
 #endif
 
     auto ents = get_now_selected_list();
+    if (_id < 0 && ents.size() > 1) {
+        auto portBoundProfiles = get_port_bound_profiles(ents);
+        if (portBoundProfiles.size() == ents.size()) {
+            start_port_bound_profiles(ents);
+            return;
+        }
+        MessageBoxWarning(
+            tr("Invalid Operation"),
+            tr("To start multiple profiles at once, every selected profile must have a local port binding.")
+        );
+        return;
+    }
     auto ent = (_id < 0 && !ents.isEmpty()) ? Configs::dataManager->profilesRepo->GetProfile(ents.first()) : Configs::dataManager->profilesRepo->GetProfile(_id);
     if (ent == nullptr) return;
 
@@ -839,7 +851,7 @@ void MainWindow::profile_start(int _id) {
     });
 }
 
-void MainWindow::start_port_bound_profiles() {
+void MainWindow::start_port_bound_profiles(const QList<int>& profileIds) {
     if (Configs::dataManager->settingsRepo->prepare_exit) return;
 #ifdef Q_OS_LINUX
     if (Configs::dataManager->settingsRepo->enable_dns_server && Configs::dataManager->settingsRepo->dns_server_listen_port <= 1024) {
@@ -856,7 +868,7 @@ void MainWindow::start_port_bound_profiles() {
         return;
     }
 
-    auto profiles = get_port_bound_profiles();
+    auto profiles = get_port_bound_profiles(profileIds);
     if (profiles.isEmpty()) {
         MessageBoxWarning(tr("Nothing to start"), tr("No profiles are bound to local ports."));
         return;

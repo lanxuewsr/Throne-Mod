@@ -67,7 +67,7 @@ public:
 
     void profile_start(int _id = -1);
 
-    void start_port_bound_profiles();
+    void start_port_bound_profiles(const QList<int>& profileIds = {});
 
     void profile_stop(bool crash = false, bool block = false, bool manual = false);
 
@@ -245,7 +245,7 @@ private:
 
     QList<int> get_selected_or_group();
 
-    QList<std::shared_ptr<Configs::Profile>> get_port_bound_profiles() const;
+    QList<std::shared_ptr<Configs::Profile>> get_port_bound_profiles(const QList<int>& profileIds = {}) const;
 
     std::shared_ptr<Configs::Profile> find_port_binding_conflict(int port, int excludeProfileId = -1) const;
 

@@ -325,7 +325,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(actionSetLocalPort, &QAction::triggered, this, [=, this]() { prompt_set_local_port_binding(); });
     connect(actionClearLocalPort, &QAction::triggered, this, [=, this]() { clear_local_port_binding(); });
     connect(actionCopyPortBoundConfig, &QAction::triggered, this, [=, this]() { copy_port_bound_config(); });
-    connect(actionStartPortBound, &QAction::triggered, this, [=, this]() { start_port_bound_profiles(); });
+    connect(actionStartPortBound, &QAction::triggered, this, [=, this]() {
+        auto selected = get_now_selected_list();
+        if (!selected.isEmpty()) start_port_bound_profiles(selected);
+        else start_port_bound_profiles();
+    });
     connect(actionStopPortBound, &QAction::triggered, this, [=, this]() { profile_stop(false, false, true); });
     ui->profilesTableView->rowsSwapped = [=,this](int row1, int row2)
     {
@@ -2516,9 +2520,11 @@ QList<int> MainWindow::get_selected_or_group() {
     return profileIDs;
 }
 
-QList<std::shared_ptr<Configs::Profile>> MainWindow::get_port_bound_profiles() const {
+QList<std::shared_ptr<Configs::Profile>> MainWindow::get_port_bound_profiles(const QList<int>& profileIds) const {
     QList<std::shared_ptr<Configs::Profile>> profiles;
-    auto ids = Configs::dataManager->profilesRepo->GetAllProfileIds();
+    auto ids = profileIds.isEmpty()
+        ? Configs::dataManager->profilesRepo->GetAllProfileIds()
+        : profileIds;
     auto batch = Configs::dataManager->profilesRepo->GetProfileBatch(ids);
     for (const auto& profile : batch) {
         if (profile != nullptr && profile->local_port > 0) {
