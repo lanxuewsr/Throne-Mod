@@ -1,5 +1,7 @@
 # Throne (Formerly Nekoray)
 
+This repository is modified and extended based on the open-source project [Throne](https://github.com/throneproj/Throne), mainly to satisfy my own usage needs. Thanks to the original author for open-sourcing it.
+
 Qt based Desktop cross-platform GUI proxy utility, empowered by [Sing-box](https://github.com/SagerNet/sing-box)
 
 Supports Windows 11/10/8/7 / Linux / MacOS out of the box.

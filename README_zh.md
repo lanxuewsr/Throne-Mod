@@ -1,5 +1,7 @@
 # Throne (原先的 Nekoray)
 
+本仓库基于开源项目 [Throne](https://github.com/throneproj/Throne) 进行修改与扩展，主要用于满足我自己的使用需求。感谢原作者开源。
+
 基于 Qt 的跨平台的桌面 GUI 代理客户端，授权自 [Sing-box](https://github.com/SagerNet/sing-box)
 
 开箱支持 Windows / Linux / MacOS 。对于 Windows 7 / 8 / 8.1，建议用 [nekoray-win7](https://github.com/parhelia512/nekoray-win7)
