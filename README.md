@@ -11,7 +11,7 @@ Apple platforms have a very strict security policy and since Throne does not hav
 
 ### GitHub Releases (Portable ZIP)
 
-[![GitHub All Releases](https://img.shields.io/github/downloads/Mahdi-zarei/nekoray/total?label=downloads-total&logo=github&style=flat-square)](https://github.com/throneproj/Throne/releases)
+[![GitHub All Releases](https://img.shields.io/github/downloads/lanxuewsr/Throne-Mod/total?label=downloads-total&logo=github&style=flat-square)](https://github.com/lanxuewsr/Throne-Mod/releases)
 
 ### RPM repository
 [Throne RPM repository](https://parhelia512.github.io/) for Fedora/RHEL and openSUSE/SLE.

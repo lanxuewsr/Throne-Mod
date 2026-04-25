@@ -33,6 +33,7 @@ namespace Configs {
 
         int id = -1;
         int gid = 0;
+        int local_port = 0;
         int latency = 0;
         QString dl_speed;
         QString ul_speed;

@@ -759,7 +759,11 @@ void MainWindow::profile_start(int _id) {
         Stats::trafficLooper->loop_enabled = true;
         Stats::connection_lister->suspend = false;
 
+        Configs::dataManager->settingsRepo->started_port_bound_mode = false;
+        Configs::dataManager->settingsRepo->started_port_bound_ids.clear();
         Configs::dataManager->settingsRepo->UpdateStartedId(ent->id);
+        running_port_bound_mode = false;
+        running_port_bound_profile_ids.clear();
         running = ent;
 
         runOnUiThread([=, this] {
@@ -815,7 +819,7 @@ void MainWindow::profile_start(int _id) {
 
     runOnNewThread([=, this] {
         // stop current running
-        if (running != nullptr) {
+        if (running != nullptr || running_port_bound_mode) {
             profile_stop(false, false, true);
             mu_stopping.lock();
             mu_stopping.unlock();
@@ -835,10 +839,141 @@ void MainWindow::profile_start(int _id) {
     });
 }
 
+void MainWindow::start_port_bound_profiles() {
+    if (Configs::dataManager->settingsRepo->prepare_exit) return;
+#ifdef Q_OS_LINUX
+    if (Configs::dataManager->settingsRepo->enable_dns_server && Configs::dataManager->settingsRepo->dns_server_listen_port <= 1024) {
+        if (!get_elevated_permissions()) {
+            MW_show_log(QString("Failed to get admin access, cannot listen on port %1 without it").arg(Configs::dataManager->settingsRepo->dns_server_listen_port));
+            return;
+        }
+    }
+#endif
+
+    if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
+        MessageBoxWarning(tr("Invalid Operation"),
+                          tr("Port-bound mode cannot be started while system proxy mode is enabled."));
+        return;
+    }
+
+    auto profiles = get_port_bound_profiles();
+    if (profiles.isEmpty()) {
+        MessageBoxWarning(tr("Nothing to start"), tr("No profiles are bound to local ports."));
+        return;
+    }
+
+    auto result = Configs::BuildPortBoundConfig(profiles);
+    if (!result || !result->error.isEmpty()) {
+        MessageBoxWarning(tr("BuildConfig return error"), result ? result->error : tr("Unknown build error"));
+        return;
+    }
+
+    QList<int> startedIds;
+    for (const auto& profile : profiles) startedIds << profile->id;
+
+    auto start_stage2 = [=, this]() {
+        libcore::LoadConfigReq req;
+        req.core_config = QJsonObject2QString(result->coreConfig, true).toStdString();
+        req.tun_ipv4_cidr = result->tunIPv4CIDR.toStdString();
+        req.disable_stats = Configs::dataManager->settingsRepo->disable_traffic_stats;
+        req.xray_config = QJsonObject2QString(result->xrayConfig, true).toStdString();
+        req.need_xray = !result->xrayConfig.isEmpty();
+
+        bool rpcOK;
+        QString error = defaultClient->Start(&rpcOK, req);
+        if (!rpcOK) return false;
+        if (!error.isEmpty()) {
+            runOnUiThread([=, this] { MessageBoxWarning("LoadConfig return error", error); });
+            return false;
+        }
+
+        Stats::trafficLooper->SetEnts(result->outboundEntsForTraffic);
+        Stats::trafficLooper->isChain = result->isChained;
+        Stats::trafficLooper->loop_enabled = true;
+        Stats::connection_lister->suspend = false;
+
+        Configs::dataManager->settingsRepo->started_id = -1919;
+        Configs::dataManager->settingsRepo->started_port_bound_mode = true;
+        Configs::dataManager->settingsRepo->started_port_bound_ids = startedIds;
+        running = nullptr;
+        running_port_bound_mode = true;
+        running_port_bound_profile_ids = startedIds;
+
+        runOnUiThread([=, this] {
+            refresh_status();
+            refresh_proxy_list(startedIds);
+        });
+        return true;
+    };
+
+    if (!mu_starting.tryLock()) {
+        MessageBoxWarning(software_name, tr("Another profile is starting..."));
+        return;
+    }
+    if (!mu_stopping.tryLock()) {
+        MessageBoxWarning(software_name, tr("Another profile is stopping..."));
+        mu_starting.unlock();
+        return;
+    }
+    mu_stopping.unlock();
+
+    if (!Configs::dataManager->settingsRepo->core_running) {
+        runOnThread([=, this] {
+            MW_show_log(tr("Restarting core before starting port-bound profiles..."));
+            core_process->Restart();
+            for (int i = 0; i < 50; i++) {
+                QThread::msleep(200);
+                if (Configs::dataManager->settingsRepo->core_running) {
+                    runOnUiThread([=, this]() { start_port_bound_profiles(); });
+                    return;
+                }
+            }
+            runOnUiThread([=, this]() {
+                MessageBoxWarning(software_name, tr("Core did not become ready in time."));
+            });
+        }, DS_cores);
+        mu_starting.unlock();
+        return;
+    }
+
+    auto restartMsgbox = new QMessageBox(QMessageBox::Question, software_name,
+                                         tr("If there is no response for a long time, it is recommended to restart the software."),
+                                         QMessageBox::Yes | QMessageBox::No, this);
+    connect(restartMsgbox, &QMessageBox::accepted, this, [=, this] { MW_dialog_message("", "RestartProgram"); });
+    auto restartMsgboxTimer = new MessageBoxTimer(this, restartMsgbox, 10000);
+
+    runOnNewThread([=, this] {
+        if (running != nullptr || running_port_bound_mode) {
+            profile_stop(false, false, true);
+            mu_stopping.lock();
+            mu_stopping.unlock();
+        }
+
+        MW_show_log(">>>>>>>> " + tr("Starting port-bound profiles"));
+        if (!start_stage2()) {
+            MW_show_log("<<<<<<<< " + tr("Failed to start port-bound profiles"));
+        }
+        mu_starting.unlock();
+
+        runOnUiThread([=, this] {
+            restartMsgboxTimer->cancel();
+            restartMsgboxTimer->deleteLater();
+            restartMsgbox->deleteLater();
+        });
+    });
+}
+
 void MainWindow::set_spmode_system_proxy(bool enable, bool save) {
     if (enable && Configs::dataManager->settingsRepo->disable_mixed_inbound) {
         runOnUiThread([=] {
            MessageBoxWarning("Invalid Operation", "Cannot set system proxy when mixed inbound is disabled.");
+        });
+        ui->checkBox_SystemProxy->setChecked(false);
+        return;
+    }
+    if (enable && running_port_bound_mode) {
+        runOnUiThread([=] {
+            MessageBoxWarning("Invalid Operation", "Cannot enable system proxy while port-bound mode is running.");
         });
         ui->checkBox_SystemProxy->setChecked(false);
         return;
@@ -865,10 +1000,11 @@ void MainWindow::set_spmode_system_proxy(bool enable, bool save) {
 }
 
 void MainWindow::profile_stop(bool crash, bool block, bool manual) {
-    if (running == nullptr) {
+    if (running == nullptr && !running_port_bound_mode) {
         return;
     }
-    auto id = running->id;
+    const auto idsToRefresh = running_port_bound_mode ? running_port_bound_profile_ids : QList<int>{running->id};
+    const auto stopLabel = running != nullptr ? running->outbound->DisplayTypeAndName() : tr("port-bound profiles");
 
     auto profile_stop_stage2 = [=,this] {
         if (currentUnderTest.load()) {
@@ -912,14 +1048,22 @@ void MainWindow::profile_stop(bool crash, bool block, bool manual) {
         }, true);
 
         // do stop
-        MW_show_log(">>>>>>>> " + tr("Stopping profile %1").arg(running->outbound->DisplayTypeAndName()));
+        MW_show_log(">>>>>>>> " + tr("Stopping %1").arg(stopLabel));
         if (!profile_stop_stage2()) {
             MW_show_log("<<<<<<<< " + tr("Failed to stop, please restart the program."));
         }
 
-        if (manual) Configs::dataManager->settingsRepo->UpdateStartedId(-1919);
+        if (manual && running != nullptr) {
+            Configs::dataManager->settingsRepo->UpdateStartedId(-1919);
+        } else {
+            Configs::dataManager->settingsRepo->started_id = -1919;
+        }
+        Configs::dataManager->settingsRepo->started_port_bound_mode = false;
+        Configs::dataManager->settingsRepo->started_port_bound_ids.clear();
         Configs::dataManager->settingsRepo->need_keep_vpn_off = false;
         running = nullptr;
+        running_port_bound_mode = false;
+        running_port_bound_profile_ids.clear();
 
         runOnUiThread([=, this, &restartMsgboxTimer, &restartMsgbox] {
             restartMsgboxTimer->cancel();
@@ -927,7 +1071,7 @@ void MainWindow::profile_stop(bool crash, bool block, bool manual) {
             restartMsgbox->deleteLater();
 
             refresh_status();
-            refresh_proxy_list({id});
+            refresh_proxy_list(idsToRefresh);
 
             mu_stopping.unlock();
         }, true);

@@ -57,7 +57,7 @@ void loadTranslate(const QString& locale) {
     }
 }
 
-#define LOCAL_SERVER_PREFIX "throne-"
+#define LOCAL_SERVER_PREFIX "throne-mod-"
 
 int main(int argc, char* argv[]) {
     // Core dump
@@ -105,7 +105,7 @@ int main(int argc, char* argv[]) {
         if (arguments.size() > appdataIndex + 1 && !arguments.at(appdataIndex + 1).startsWith("-")) {
             appDataDir = arguments.at(appdataIndex + 1);
         }
-        QApplication::setApplicationName("Throne");
+        QApplication::setApplicationName("Throne-Mod");
         if (!appDataDir.isEmpty()) {
             wd.setPath(appDataDir);
         } else {

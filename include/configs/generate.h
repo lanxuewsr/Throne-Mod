@@ -166,6 +166,8 @@ namespace Configs
 
     std::shared_ptr<BuildConfigResult> BuildSingBoxConfig(const std::shared_ptr<Profile> &ent);
 
+    std::shared_ptr<BuildConfigResult> BuildPortBoundConfig(const QList<std::shared_ptr<Profile>> &profiles);
+
     class BuildTestConfigResult {
     public:
         QString error;

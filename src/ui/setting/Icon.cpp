@@ -21,7 +21,7 @@ QPixmap Icon::GetTrayIcon(TrayIconStatus status) {
     } else if (status == RUNNING)
     {
         if (Configs::dataManager->settingsRepo->use_custom_icons) {
-            pixmap_read = QPixmap(QString("icons/") + "Throne" + ".png");
+            pixmap_read = QPixmap(QString("icons/") + "Throne-Mod" + ".png");
         }
         if (pixmap_read.isNull()) {
             pixmap_read = QPixmap(QString(":/Throne/") + "Throne" + ".png");

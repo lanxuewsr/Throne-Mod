@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(Throne VERSION 0.1)
+project(ThroneMod VERSION 0.1)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
@@ -372,10 +372,12 @@ if (APPLE)
 endif ()
 
 set_target_properties(Throne PROPERTIES
+        OUTPUT_NAME "Throne-Mod"
+        MACOSX_BUNDLE_BUNDLE_NAME "Throne-Mod"
         MACOSX_BUNDLE_ICON_FILE "Throne.icns"
         RESOURCE ${MACOSX_ICON}
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/res/MacOSXBundleInfo.plist
-        MACOSX_BUNDLE_GUI_IDENTIFIER moe.Throne.macosx
+        MACOSX_BUNDLE_GUI_IDENTIFIER moe.ThroneMod.macosx
         MACOSX_BUNDLE TRUE
         WIN32_EXECUTABLE TRUE
         UNITY_BUILD ON
@@ -386,8 +388,6 @@ set_property(SOURCE "3rdparty/SQLiteCpp/src/sqlite3.c" PROPERTY SKIP_UNITY_BUILD
 
 set(TS_FILES
         res/translations/zh_CN.ts
-        res/translations/fa_IR.ts
-        res/translations/ru_RU.ts
 )
 set(LUPDATE_OPTIONS
         -locations none -no-obsolete

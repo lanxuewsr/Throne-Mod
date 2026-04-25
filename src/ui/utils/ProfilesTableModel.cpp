@@ -19,7 +19,7 @@ int ProfilesTableModel::rowCount(const QModelIndex &parent) const {
 
 int ProfilesTableModel::columnCount(const QModelIndex &parent) const {
     if (parent.isValid()) return 0;
-    return 5;
+    return 6;
 }
 
 Qt::ItemFlags ProfilesTableModel::flags(const QModelIndex &index) const {
@@ -81,7 +81,7 @@ void ProfilesTableModel::evictOne() const {
 
 QVariant ProfilesTableModel::data(const QModelIndex &index, int role) const {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_profileIds.size()
-        || index.column() < 0 || index.column() >= 5) {
+        || index.column() < 0 || index.column() >= 6) {
         return {};
     }
     const int profileId = m_profileIds[index.row()];
@@ -95,7 +95,8 @@ QVariant ProfilesTableModel::data(const QModelIndex &index, int role) const {
     if (!profile) return {};
 
     const int startedId = Configs::dataManager->settingsRepo->started_id;
-    const bool isRunning = (profile->id == startedId);
+    const bool isRunning = (profile->id == startedId) ||
+                           Configs::dataManager->settingsRepo->started_port_bound_ids.contains(profile->id);
     QColor linkColor = isRunning ? QApplication::palette().link().color() : QColor();
 
     if (role == Qt::DisplayRole) {
@@ -105,6 +106,7 @@ QVariant ProfilesTableModel::data(const QModelIndex &index, int role) const {
         case 2: return profile->outbound ? profile->outbound->name : QString();
         case 3: return profile->DisplayTestResult();
         case 4: return profile->DisplayTraffic();
+        case 5: return profile->local_port > 0 ? QString::number(profile->local_port) : QString();
         default: return {};
         }
     }
@@ -128,6 +130,7 @@ QVariant ProfilesTableModel::headerData(int section, Qt::Orientation orientation
         case 2: return tr("Name");
         case 3: return tr("Test Result");
         case 4: return tr("Traffic");
+        case 5: return tr("Local Port");
         default: return {};
         }
     }
@@ -201,7 +204,8 @@ int ProfilesTableModel::indexOfProfile(int id) {
 QString ProfilesTableModel::rowLabel(int row) const {
     if (row < 0 || row >= m_profileIds.size()) return {};
     int id = m_profileIds[row];
-    if (Configs::dataManager->settingsRepo->started_id == id) {
+    if (Configs::dataManager->settingsRepo->started_id == id ||
+        Configs::dataManager->settingsRepo->started_port_bound_ids.contains(id)) {
         return QStringLiteral("✓");
     }
     return QString::number(row + 1) + QStringLiteral("  ");

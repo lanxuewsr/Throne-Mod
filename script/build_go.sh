@@ -2,6 +2,8 @@
 set -e
 
 TAGS="with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,with_dhcp,with_tailscale,badlinkname,tfogo_checklinkname0"
+CORE_NAME="Throne-ModCore"
+[[ "$GOOS" == "windows" || "$GOOS" == windowslegacy ]] && CORE_NAME="${CORE_NAME}.exe"
 
 rm -rf $DEST
 mkdir -p $DEST
@@ -38,5 +40,5 @@ pushd gen
 protoc -I . --go_out=. --go-grpc_out=. libcore.proto
 popd
 VERSION_SINGBOX=$(go list -m -f '{{.Version}}' github.com/sagernet/sing-box)
-$GOCMD build -v -o $DEST -trimpath -ldflags "-w -s -X 'github.com/sagernet/sing-box/constant.Version=${VERSION_SINGBOX}' -X 'internal/godebug.defaultGODEBUG=multipathtcp=0' -checklinkname=0" -tags "$TAGS"
+$GOCMD build -v -o "$DEST/$CORE_NAME" -trimpath -ldflags "-w -s -X 'github.com/sagernet/sing-box/constant.Version=${VERSION_SINGBOX}' -X 'internal/godebug.defaultGODEBUG=multipathtcp=0' -checklinkname=0" -tags "$TAGS"
 popd

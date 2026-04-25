@@ -1181,6 +1181,241 @@ namespace Configs {
         return ctx->buildConfigResult;
     }
 
+    std::shared_ptr<BuildConfigResult> BuildPortBoundConfig(const QList<std::shared_ptr<Profile>>& profiles)
+    {
+        auto res = std::make_shared<BuildConfigResult>();
+        if (profiles.isEmpty()) {
+            res->error = "No profiles are bound to local ports.";
+            return res;
+        }
+
+        auto ctx = std::make_shared<BuildSingBoxConfigContext>();
+        ctx->forExport = true;
+        ctx->tunEnabled = Configs::dataManager->settingsRepo->spmode_vpn;
+        ctx->os = getOS();
+        if (ctx->os == Linux) {
+            ctx->isResolvedUsed = isSystemdResolvedDefaultResolver();
+        }
+
+        QMap<int, int> portOwners;
+        QList<int> directDomainIDs;
+        int xrayCount = 0;
+        int chainCount = 0;
+
+        for (const auto& profile : profiles) {
+            if (profile == nullptr || profile->local_port <= 0) continue;
+
+            if (portOwners.contains(profile->local_port)) {
+                auto other = Configs::dataManager->profilesRepo->GetProfile(portOwners[profile->local_port]);
+                auto otherName = other ? other->outbound->DisplayTypeAndName() : QString::number(portOwners[profile->local_port]);
+                res->error = QString("Port %1 is used by both %2 and %3.")
+                                 .arg(profile->local_port)
+                                 .arg(otherName, profile->outbound->DisplayTypeAndName());
+                return res;
+            }
+
+            if (profile->type == "extracore" || profile->type == "tailscale") {
+                res->error = QString("Profile %1 is not supported in port-bound config.")
+                                 .arg(profile->outbound->DisplayTypeAndName());
+                return res;
+            }
+
+            if (profile->type == "custom") {
+                auto custom = profile->Custom();
+                if (custom != nullptr && custom->type == "fullconfig") {
+                    res->error = QString("Custom full-config profile %1 cannot be merged into a port-bound config.")
+                                     .arg(profile->outbound->DisplayTypeAndName());
+                    return res;
+                }
+            }
+
+            if (!IsValid(profile)) {
+                res->error = QString("Invalid profile: %1").arg(profile->outbound->DisplayTypeAndName());
+                return res;
+            }
+
+            portOwners.insert(profile->local_port, profile->id);
+            directDomainIDs << profile->id;
+            if (profile->outbound->IsXray()) xrayCount++;
+            if (profile->type == "chain") chainCount++;
+        }
+
+        if (portOwners.isEmpty()) {
+            res->error = "No profiles are bound to local ports.";
+            return res;
+        }
+
+        ctx->buildPrerequisities->dnsDeps->directDomains = QListStr2QJsonArray(getEntDomains(directDomainIDs, ctx->error));
+        if (!ctx->buildPrerequisities->dnsDeps->directDomains.isEmpty()) {
+            ctx->buildPrerequisities->dnsDeps->needDirectDnsRules = true;
+        }
+
+        buildLogSections(ctx);
+        buildNTPSection(ctx);
+        buildDNSSection(ctx);
+        if (!ctx->error.isEmpty()) {
+            res->error = ctx->error;
+            return res;
+        }
+        buildCertificateSection(ctx);
+
+        auto xrayPorts = MkManyPorts(xrayCount + 2 * chainCount);
+        int xrayPortIdx = 0;
+        QMap<int, QString> profileInboundTags;
+        QMap<int, QString> profileOutboundTags;
+
+        for (const auto& profile : profiles) {
+            if (profile == nullptr || profile->local_port <= 0) continue;
+
+            auto ids = unwrapChain(profile->id);
+            auto group = Configs::dataManager->groupsRepo->GetGroup(profile->gid);
+            if (group == nullptr) {
+                res->error = "Profile group is missing, data is corrupted.";
+                return res;
+            }
+            if (group->landing_proxy_id >= 0) ids.prepend(group->landing_proxy_id);
+            if (group->front_proxy_id >= 0) ids.append(group->front_proxy_id);
+
+            int singToXrayPort = -1;
+            int xrayToSingPort = -1;
+            if (profile->outbound->IsXray()) singToXrayPort = xrayPorts[xrayPortIdx++];
+            if (profile->type == "chain") {
+                singToXrayPort = xrayPorts[xrayPortIdx++];
+                xrayToSingPort = xrayPorts[xrayPortIdx++];
+            }
+
+            ctx->singToXrayTransitioned = false;
+            ctx->xrayToSingTransitioned = false;
+
+            const auto prefix = "bound-" + Int2String(profile->id);
+            buildOutboundChain(ctx, ids, prefix, false, true, singToXrayPort, xrayToSingPort);
+            if (!ctx->error.isEmpty()) {
+                res->error = ctx->error;
+                return res;
+            }
+
+            profileInboundTags.insert(profile->id, prefix + "-in");
+            profileOutboundTags.insert(profile->id, prefix + "-0");
+            if (ids.size() > 1) ctx->buildConfigResult->isChained = true;
+        }
+
+        buildExperimentalSection(ctx);
+        buildXrayConfig(ctx);
+        if (!ctx->error.isEmpty()) {
+            res->error = ctx->error;
+            return res;
+        }
+
+        ctx->outbounds << QJsonObject{
+            {"type", "direct"},
+            {"tag", "direct"}
+        };
+
+        QJsonArray inboundArr;
+        inboundArr << QJsonObject{
+            {"tag", "dns-in"},
+            {"type", "direct"},
+            {"listen", "127.0.0.1"},
+            {"listen_port", dataManager->settingsRepo->core_dns_in_port}
+        };
+
+        for (const auto& profile : profiles) {
+            if (profile == nullptr || profile->local_port <= 0) continue;
+
+            QJsonObject inboundObj{
+                {"tag", profileInboundTags.value(profile->id)},
+                {"type", "mixed"},
+                {"listen", Configs::dataManager->settingsRepo->inbound_address},
+                {"listen_port", profile->local_port}
+            };
+            if (Configs::dataManager->settingsRepo->inbound_auth) {
+                inboundObj["users"] = QJsonArray{
+                    QJsonObject{
+                        {"username", Configs::dataManager->settingsRepo->inbound_user},
+                        {"password", Configs::dataManager->settingsRepo->inbound_pass}
+                    }
+                };
+            }
+            inboundArr << inboundObj;
+        }
+
+        if (ctx->xrayToSingBridges.size() != ctx->singIngressTags.size()) {
+            res->error = "xray to sing-box bridges count does not match ingress tags count";
+            return res;
+        }
+
+        for (auto idx = 0; idx < ctx->xrayToSingBridges.size(); idx++) {
+            auto bridgeConf = ctx->xrayToSingBridges[idx];
+            inboundArr << QJsonObject{
+                {"type", "socks"},
+                {"tag", "bridge-" + ctx->singIngressTags[idx]},
+                {"listen", "127.0.0.1"},
+                {"listen_port", bridgeConf.port},
+                {"users", QJsonArray{
+                     QJsonObject{
+                         {"username", bridgeConf.auth},
+                         {"password", bridgeConf.auth}
+                     }
+                 }}
+            };
+        }
+
+        QJsonArray routeRules;
+        routeRules << QJsonObject{
+            {"inbound", "dns-in"},
+            {"action", "sniff"},
+        };
+        routeRules << QJsonObject{
+            {"action", "hijack-dns"},
+            {"protocol", "dns"},
+            {"inbound", "dns-in"},
+        };
+        routeRules << QJsonObject{
+            {"inbound", "dns-in"},
+            {"action", "reject"},
+        };
+        routeRules << QJsonObject{
+            {"action", "route"},
+            {"process_path", FindCoreRealPath()},
+            {"outbound", "direct"},
+        };
+
+        for (auto idx = 0; idx < ctx->xrayToSingBridges.size(); idx++) {
+            routeRules << QJsonObject{
+                {"inbound", "bridge-" + ctx->singIngressTags[idx]},
+                {"action", "route"},
+                {"outbound", ctx->singIngressTags[idx]},
+            };
+        }
+
+        for (const auto& profile : profiles) {
+            if (profile == nullptr || profile->local_port <= 0) continue;
+            routeRules << QJsonObject{
+                {"inbound", profileInboundTags.value(profile->id)},
+                {"action", "route"},
+                {"outbound", profileOutboundTags.value(profile->id)},
+            };
+        }
+
+        QJsonObject route{
+            {"rules", routeRules},
+            {"final", "direct"},
+            {"auto_detect_interface", true},
+            {"default_domain_resolver", QJsonObject{
+                 {"server", "dns-direct"},
+                 {"strategy", Configs::dataManager->settingsRepo->default_domain_strategy},
+             }}
+        };
+        if (Configs::dataManager->settingsRepo->enable_stats) route["find_process"] = true;
+
+        ctx->buildConfigResult->coreConfig["inbounds"] = inboundArr;
+        ctx->buildConfigResult->coreConfig["outbounds"] = ctx->outbounds;
+        ctx->buildConfigResult->coreConfig["endpoints"] = ctx->endpoints;
+        ctx->buildConfigResult->coreConfig["route"] = route;
+
+        return ctx->buildConfigResult;
+    }
+
     bool IsValid(const std::shared_ptr<Profile>& ent)
     {
         if (ent->type == "chain")

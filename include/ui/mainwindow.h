@@ -67,6 +67,8 @@ public:
 
     void profile_start(int _id = -1);
 
+    void start_port_bound_profiles();
+
     void profile_stop(bool crash = false, bool block = false, bool manual = false);
 
     void set_spmode_system_proxy(bool enable, bool save = true);
@@ -183,6 +185,8 @@ private:
     QString title_error;
     int icon_status = -1;
     std::shared_ptr<Configs::Profile> running;
+    bool running_port_bound_mode = false;
+    QList<int> running_port_bound_profile_ids;
     QString traffic_update_cache;
     qint64 last_test_time = 0;
     //
@@ -240,6 +244,16 @@ private:
     QList<int> get_now_selected_list();
 
     QList<int> get_selected_or_group();
+
+    QList<std::shared_ptr<Configs::Profile>> get_port_bound_profiles() const;
+
+    std::shared_ptr<Configs::Profile> find_port_binding_conflict(int port, int excludeProfileId = -1) const;
+
+    void prompt_set_local_port_binding();
+
+    void clear_local_port_binding();
+
+    void copy_port_bound_config();
 
     void saveProfileFocusState();
 

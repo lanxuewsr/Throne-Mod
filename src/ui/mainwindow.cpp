@@ -170,7 +170,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     if (Configs::dataManager->settingsRepo->core_port <= 0) Configs::dataManager->settingsRepo->core_port = 19810;
 
     auto core_path = QApplication::applicationDirPath() + "/";
-    core_path += "ThroneCore";
+    core_path += "Throne-ModCore";
 
     QStringList args;
     args.push_back("-port");
@@ -249,7 +249,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }
 
     // software_name
-    software_name = "Throne";
+    software_name = "Throne-Mod";
     software_core_name = "sing-box";
     //
     if (auto dashDir = QDir("dashboard"); !dashDir.exists() && QDir().mkdir("dashboard")) {
@@ -311,6 +311,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // table UI: model-backed view with on-demand row data
     profilesTableModel = new ProfilesTableModel(this);
     ui->profilesTableView->setModel(profilesTableModel);
+    auto *actionSetLocalPort = new QAction(tr("Set Local Port..."), this);
+    auto *actionClearLocalPort = new QAction(tr("Clear Local Port Binding"), this);
+    auto *actionCopyPortBoundConfig = new QAction(tr("Copy Port-Bound Config"), this);
+    auto *actionStartPortBound = new QAction(tr("Start Port-Bound Profiles"), this);
+    auto *actionStopPortBound = new QAction(tr("Stop Port-Bound Profiles"), this);
+    ui->menu_server->insertSeparator(ui->menu_export_config);
+    ui->menu_server->insertAction(ui->menu_export_config, actionCopyPortBoundConfig);
+    ui->menu_server->insertAction(actionCopyPortBoundConfig, actionClearLocalPort);
+    ui->menu_server->insertAction(actionClearLocalPort, actionSetLocalPort);
+    ui->menu_server->insertAction(actionSetLocalPort, actionStopPortBound);
+    ui->menu_server->insertAction(actionStopPortBound, actionStartPortBound);
+    connect(actionSetLocalPort, &QAction::triggered, this, [=, this]() { prompt_set_local_port_binding(); });
+    connect(actionClearLocalPort, &QAction::triggered, this, [=, this]() { clear_local_port_binding(); });
+    connect(actionCopyPortBoundConfig, &QAction::triggered, this, [=, this]() { copy_port_bound_config(); });
+    connect(actionStartPortBound, &QAction::triggered, this, [=, this]() { start_port_bound_profiles(); });
+    connect(actionStopPortBound, &QAction::triggered, this, [=, this]() { profile_stop(false, false, true); });
     ui->profilesTableView->rowsSwapped = [=,this](int row1, int row2)
     {
         if (!addressFilterString.isEmpty() || !nameFilterString.isEmpty() || !typeFilterString.isEmpty() || !countryFilterString.isEmpty()) return;
@@ -338,6 +354,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             action.method = GroupSortMethod::ByTestResult;
         } else if (logicalIndex == 4) {
             action.method = GroupSortMethod::ByTraffic;
+        } else if (logicalIndex == 5) {
+            action.method = GroupSortMethod::ByLocalPort;
         } else {
             return;
         }
@@ -544,8 +562,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(trayServerMenu, &QMenu::aboutToShow, this, [=, this]() {
         trayServerMenu->clear();
         // Stop action if a profile is running
-        if (running) {
-            auto *stopAction = trayServerMenu->addAction(tr("Stop: %1").arg(running->name));
+        if (running || running_port_bound_mode) {
+            const auto stopText = running
+                ? tr("Stop: %1").arg(running->name)
+                : tr("Stop Port-Bound Profiles");
+            auto *stopAction = trayServerMenu->addAction(stopText);
             connect(stopAction, &QAction::triggered, this, [=, this]() { profile_stop(false, false, true); });
             trayServerMenu->addSeparator();
         }
@@ -690,7 +711,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         {
             ui->actionSpeedtest_Current->setEnabled(false);
         }
-        if (auto selected = get_now_selected_list(); selected.empty())
+        const auto selected = get_now_selected_list();
+        if (selected.empty())
         {
             ui->actionSpeedtest_Selected->setEnabled(false);
             ui->actionUrl_Test_Selected->setEnabled(false);
@@ -703,6 +725,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             ui->menu_resolve_selected->setEnabled(true);
             ui->actionResolve_Selected_Out_IP->setEnabled(true);
         }
+        actionSetLocalPort->setEnabled(selected.count() == 1);
+        actionClearLocalPort->setEnabled(!selected.empty());
+        actionCopyPortBoundConfig->setEnabled(!get_port_bound_profiles().isEmpty());
+        actionStartPortBound->setEnabled(!get_port_bound_profiles().isEmpty() && !running_port_bound_mode);
+        actionStopPortBound->setEnabled(running_port_bound_mode);
         if (!speedtestRunning.tryLock()) {
             ui->menu_server->addAction(ui->menu_stop_testing);
         } else {
@@ -753,7 +780,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             Configs::dataManager->settingsRepo->adblock_enable = checked;
             actionAdblock->setChecked(checked);
             Configs::dataManager->settingsRepo->Save();
-            if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
+            if (Configs::dataManager->settingsRepo->started_port_bound_mode) start_port_bound_profiles();
+            else if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
         });
         ui->menuRouting_Menu->addAction(actionAdblock);
 
@@ -765,7 +793,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             Configs::dataManager->settingsRepo->enable_warp = checked;
             actionWarp->setChecked(checked);
             Configs::dataManager->settingsRepo->Save();
-            if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
+            if (Configs::dataManager->settingsRepo->started_port_bound_mode) start_port_bound_profiles();
+            else if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
         });
         ui->menuRouting_Menu->addAction(actionWarp);
 
@@ -820,7 +849,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
                 if (Configs::dataManager->settingsRepo->current_route_id == routeID) return;
                 Configs::dataManager->settingsRepo->current_route_id = routeID;
                 Configs::dataManager->settingsRepo->Save();
-                if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
+                if (Configs::dataManager->settingsRepo->started_port_bound_mode) start_port_bound_profiles();
+                else if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
             });
             ui->menuRouting_Menu->addAction(action);
         }
@@ -1157,9 +1187,11 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
         if (info.contains("VPNChanged") && Configs::dataManager->settingsRepo->spmode_vpn) {
             MessageBoxWarning(tr("Tun Settings changed"), tr("Restart Tun to take effect."));
         }
-        if ((info.contains("NeedChoosePort") || suggestRestartProxy) && Configs::dataManager->settingsRepo->started_id >= 0 &&
+        if ((info.contains("NeedChoosePort") || suggestRestartProxy) &&
+            (Configs::dataManager->settingsRepo->started_id >= 0 || Configs::dataManager->settingsRepo->started_port_bound_mode) &&
             QMessageBox::question(GetMessageBoxParent(), tr("Confirmation"), tr("Settings changed, restart proxy?")) == QMessageBox::StandardButton::Yes) {
-            profile_start(Configs::dataManager->settingsRepo->started_id);
+            if (Configs::dataManager->settingsRepo->started_port_bound_mode) start_port_bound_profiles();
+            else profile_start(Configs::dataManager->settingsRepo->started_id);
         }
         refresh_status();
     }
@@ -1201,7 +1233,8 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
             refresh_proxy_list({}, true);
             if (msg.contains("restart")) {
                 if (QMessageBox::question(GetMessageBoxParent(), tr("Confirmation"), tr("Settings changed, restart proxy?")) == QMessageBox::StandardButton::Yes) {
-                    profile_start(Configs::dataManager->settingsRepo->started_id);
+                    if (Configs::dataManager->settingsRepo->started_port_bound_mode) start_port_bound_profiles();
+                    else profile_start(Configs::dataManager->settingsRepo->started_id);
                 }
             }
         }
@@ -1429,7 +1462,7 @@ bool MainWindow::get_elevated_permissions(int reason) {
     }
 #endif
 #ifdef Q_OS_WIN
-    auto n = QMessageBox::warning(GetMessageBoxParent(), software_name, tr("Please run Throne as admin"), QMessageBox::Yes | QMessageBox::No);
+    auto n = QMessageBox::warning(GetMessageBoxParent(), software_name, tr("Please run Throne-Mod as admin"), QMessageBox::Yes | QMessageBox::No);
     if (n == QMessageBox::Yes) {
         this->exit_reason = reason;
         on_menu_exit_triggered();
@@ -1483,7 +1516,8 @@ void MainWindow::set_spmode_vpn(bool enable, bool save) {
     Configs::dataManager->settingsRepo->spmode_vpn = enable;
     refresh_status();
 
-    if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
+    if (Configs::dataManager->settingsRepo->started_port_bound_mode) start_port_bound_profiles();
+    else if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
 }
 
 void MainWindow::UpdateDataView(bool force)
@@ -1730,6 +1764,18 @@ void MainWindow::refresh_status(const QString &traffic_update) {
             if (!running->runningCountryInfo.isEmpty()) {
                 runningLabelText += "\n" + running->runningCountryInfo;
             }
+        } else if (running_port_bound_mode) {
+            QStringList ports;
+            for (const auto id : running_port_bound_profile_ids) {
+                auto profile = Configs::dataManager->profilesRepo->GetProfile(id);
+                if (profile != nullptr && profile->local_port > 0) {
+                    ports << QString::number(profile->local_port);
+                }
+            }
+            runningLabelText = tr("Port-Bound Mode");
+            if (!ports.isEmpty()) {
+                runningLabelText += "\n" + ports.join(", ");
+            }
         } else {
             runningLabelText = tr("Not Running");
         }
@@ -1739,6 +1785,16 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     auto display_socks = DisplayAddress(Configs::dataManager->settingsRepo->inbound_address, Configs::dataManager->settingsRepo->inbound_socks_port);
     auto inbound_disabled = Configs::dataManager->settingsRepo->disable_mixed_inbound;
     auto inbound_txt = QString("Mixed: %1").arg(inbound_disabled ? "Disabled" : display_socks);
+    if (running_port_bound_mode) {
+        QStringList boundPorts;
+        for (const auto id : running_port_bound_profile_ids) {
+            auto profile = Configs::dataManager->profilesRepo->GetProfile(id);
+            if (profile != nullptr && profile->local_port > 0) {
+                boundPorts << QString::number(profile->local_port);
+            }
+        }
+        if (!boundPorts.isEmpty()) inbound_txt = tr("Bound Ports: %1").arg(boundPorts.join(", "));
+    }
     ui->label_inbound->setText(inbound_txt);
     //
     ui->checkBox_VPN->setChecked(Configs::dataManager->settingsRepo->spmode_vpn);
@@ -1768,13 +1824,23 @@ void MainWindow::refresh_status(const QString &traffic_update) {
             if (!running->runningCountryInfo.isEmpty()) {
                 tt << running->runningCountryInfo;
             }
+        } else if (running_port_bound_mode) {
+            tt << tr("Port-Bound Mode");
+            QStringList boundPorts;
+            for (const auto id : running_port_bound_profile_ids) {
+                auto profile = Configs::dataManager->profilesRepo->GetProfile(id);
+                if (profile != nullptr && profile->local_port > 0) {
+                    boundPorts << QString::number(profile->local_port);
+                }
+            }
+            if (!boundPorts.isEmpty()) tt << boundPorts.join(", ");
         }
         return tt.join(isTray ? "\n" : " ");
     };
 
     auto icon_status_new = Icon::NONE;
 
-    if (running != nullptr) {
+    if (running != nullptr || running_port_bound_mode) {
         if (Configs::dataManager->settingsRepo->spmode_vpn) {
             icon_status_new = Icon::VPN;
         } else if (Configs::dataManager->settingsRepo->system_dns_set && Configs::dataManager->settingsRepo->spmode_system_proxy) {
@@ -1858,6 +1924,9 @@ void MainWindow::refresh_groups() {
 void MainWindow::refresh_proxy_list_column_size() {
     auto group = Configs::dataManager->groupsRepo->CurrentGroup();
     if (!group) return;
+    if (!group->column_width.isEmpty() && group->column_width.size() < 6) {
+        group->column_width.clear();
+    }
 
     auto *hHeader = dynamic_cast<ProfilesTableFilterHeader*>(ui->profilesTableView->horizontalHeader());
     QTimer::singleShot(0, ui->profilesTableView, [=, this]() {
@@ -1868,6 +1937,7 @@ void MainWindow::refresh_proxy_list_column_size() {
             hHeader->setSectionResizeMode(2, QHeaderView::Stretch);
             hHeader->setSectionResizeMode(3, QHeaderView::ResizeToContents);
             hHeader->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+            hHeader->setSectionResizeMode(5, QHeaderView::ResizeToContents);
             if (!group->calculated_column_width.empty() && group->calculated_column_width[0] > hHeader->sectionSize(0)) {
                 hHeader->setSectionResizeMode(0, QHeaderView::Fixed);
                 hHeader->resizeSection(0, group->calculated_column_width[0]);
@@ -1880,9 +1950,13 @@ void MainWindow::refresh_proxy_list_column_size() {
                 hHeader->setSectionResizeMode(4, QHeaderView::Fixed);
                 hHeader->resizeSection(4, group->calculated_column_width[4]);
             }
+            if (group->calculated_column_width.size() > 5 && group->calculated_column_width[5] > hHeader->sectionSize(5)) {
+                hHeader->setSectionResizeMode(5, QHeaderView::Fixed);
+                hHeader->resizeSection(5, group->calculated_column_width[5]);
+            }
             ui->profilesTableView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
             group->clearCalculatedColumnWidth();
-            for (int i=0;i<=4;i++) {
+            for (int i=0;i<=5;i++) {
                 auto size = hHeader->sectionSize(i);
                 hHeader->setSectionResizeMode(i, QHeaderView::Interactive);
                 hHeader->resizeSection(i, size);
@@ -1890,7 +1964,7 @@ void MainWindow::refresh_proxy_list_column_size() {
             }
         } else {
             group->clearCalculatedColumnWidth();
-            for (int i=0;i<=4;i++) {
+            for (int i=0;i<=5;i++) {
                 hHeader->setSectionResizeMode(i, QHeaderView::Interactive);
                 hHeader->resizeSection(i, group->column_width.at(i));
             }
@@ -2442,6 +2516,120 @@ QList<int> MainWindow::get_selected_or_group() {
     return profileIDs;
 }
 
+QList<std::shared_ptr<Configs::Profile>> MainWindow::get_port_bound_profiles() const {
+    QList<std::shared_ptr<Configs::Profile>> profiles;
+    auto ids = Configs::dataManager->profilesRepo->GetAllProfileIds();
+    auto batch = Configs::dataManager->profilesRepo->GetProfileBatch(ids);
+    for (const auto& profile : batch) {
+        if (profile != nullptr && profile->local_port > 0) {
+            profiles << profile;
+        }
+    }
+    return profiles;
+}
+
+std::shared_ptr<Configs::Profile> MainWindow::find_port_binding_conflict(int port, int excludeProfileId) const {
+    if (port <= 0) return nullptr;
+    for (const auto& profile : get_port_bound_profiles()) {
+        if (profile == nullptr || profile->id == excludeProfileId) continue;
+        if (profile->local_port == port) return profile;
+    }
+    return nullptr;
+}
+
+void MainWindow::prompt_set_local_port_binding() {
+    auto entIDs = get_now_selected_list();
+    if (entIDs.count() != 1) return;
+
+    auto profile = Configs::dataManager->profilesRepo->GetProfile(entIDs.first());
+    if (profile == nullptr) return;
+
+    bool ok = false;
+    const int currentPort = profile->local_port > 0 ? profile->local_port : Configs::dataManager->settingsRepo->inbound_socks_port;
+    const int newPort = QInputDialog::getInt(
+        this,
+        tr("Set Local Port"),
+        tr("Choose the local listening port for %1").arg(profile->outbound->DisplayTypeAndName()),
+        currentPort,
+        1,
+        65535,
+        1,
+        &ok
+    );
+    if (!ok) return;
+
+    auto conflict = find_port_binding_conflict(newPort, profile->id);
+    if (conflict != nullptr) {
+        MessageBoxWarning(
+            tr("Port Conflict"),
+            tr("Port %1 is already bound to %2. Please clear that binding first.")
+                .arg(newPort)
+                .arg(conflict->outbound->DisplayTypeAndName())
+        );
+        return;
+    }
+
+    profile->local_port = newPort;
+    Configs::dataManager->profilesRepo->Save(profile);
+    refresh_proxy_list({profile->id});
+}
+
+void MainWindow::clear_local_port_binding() {
+    auto entIDs = get_now_selected_list();
+    if (entIDs.isEmpty()) return;
+
+    auto profiles = Configs::dataManager->profilesRepo->GetProfileBatch(entIDs);
+    QList<int> changedIds;
+    for (const auto& profile : profiles) {
+        if (profile == nullptr || profile->local_port <= 0) continue;
+        profile->local_port = 0;
+        Configs::dataManager->profilesRepo->Save(profile);
+        changedIds << profile->id;
+    }
+
+    if (!changedIds.isEmpty()) {
+        refresh_proxy_list(changedIds);
+    }
+}
+
+void MainWindow::copy_port_bound_config() {
+    auto profiles = get_port_bound_profiles();
+    if (profiles.isEmpty()) {
+        MessageBoxWarning(tr("Nothing to export"), tr("No profiles are bound to local ports."));
+        return;
+    }
+
+    auto result = Configs::BuildPortBoundConfig(profiles);
+    if (!result || !result->error.isEmpty()) {
+        MessageBoxWarning(tr("Build config error"), result ? result->error : tr("Unknown build error"));
+        return;
+    }
+
+    const auto coreConfig = QJsonObject2QString(result->coreConfig, true);
+    QApplication::clipboard()->setText(coreConfig);
+
+    if (result->xrayConfig.isEmpty()) {
+        QMessageBox::information(this, tr("Config copied"), tr("Port-bound sing-box config has been copied to the clipboard."));
+        return;
+    }
+
+    QMessageBox msg(QMessageBox::Information,
+                    tr("Config copied"),
+                    tr("Port-bound sing-box config has been copied. This build also generated an Xray bridge config."));
+    auto *copyCore = msg.addButton(tr("Copy sing-box config"), QMessageBox::YesRole);
+    auto *copyXray = msg.addButton(tr("Copy Xray config"), QMessageBox::YesRole);
+    msg.addButton(QMessageBox::Ok);
+    msg.setDefaultButton(QMessageBox::Ok);
+    msg.setEscapeButton(QMessageBox::Ok);
+    msg.exec();
+
+    if (msg.clickedButton() == copyCore) {
+        QApplication::clipboard()->setText(coreConfig);
+    } else if (msg.clickedButton() == copyXray) {
+        QApplication::clipboard()->setText(QJsonObject2QString(result->xrayConfig, true));
+    }
+}
+
 void MainWindow::saveProfileFocusState() {
     auto group = Configs::dataManager->groupsRepo->CurrentGroup();
     if (group == nullptr) return;
@@ -2686,6 +2874,16 @@ void MainWindow::on_tabWidget_customContextMenuRequested(const QPoint &p) {
             QMessageBox::StandardButton::Yes) {
             if (running != nullptr) {
                 if (running->gid == id) profile_stop(false, true, false);
+            } else if (running_port_bound_mode) {
+                auto group = Configs::dataManager->groupsRepo->GetGroup(id);
+                if (group != nullptr) {
+                    for (const auto profileId : group->Profiles()) {
+                        if (running_port_bound_profile_ids.contains(profileId)) {
+                            profile_stop(false, true, false);
+                            break;
+                        }
+                    }
+                }
             }
             Configs::dataManager->groupsRepo->DeleteGroup(id);
             MW_dialog_message(Dialog_DialogManageGroups, "refresh-1");
@@ -2905,7 +3103,7 @@ bool MainWindow::StopVPNProcess() {
 
 bool isNewer(QString assetName) {
     if (QString(NKR_VERSION).isEmpty()) return false;
-    assetName = assetName.mid(7); // take out Throne-
+    assetName = assetName.mid(QString("Throne-Mod-").size()); // take out Throne-Mod-
     QString version;
     auto spl = assetName.split('-');
     version += spl[0]; // version: 1.2.3
@@ -3009,7 +3207,7 @@ void MainWindow::CheckUpdate() {
         return;
     }
 
-    auto resp = NetworkRequestHelper::HttpGet("https://api.github.com/repos/throneproj/Throne/releases");
+    auto resp = NetworkRequestHelper::HttpGet("https://api.github.com/repos/lanxuewsr/Throne-Mod/releases");
     if (!resp.error.isEmpty()) {
         runOnUiThread([=,this] {
             MessageBoxWarning(QObject::tr("Update"), QObject::tr("Requesting update error: %1").arg(resp.error + "\n" + resp.data));
@@ -3068,7 +3266,7 @@ void MainWindow::CheckUpdate() {
                 }
                 QString errors;
                 if (!release_download_url.isEmpty()) {
-                    auto res = NetworkRequestHelper::DownloadAsset(release_download_url, "Throne.zip");
+                    auto res = NetworkRequestHelper::DownloadAsset(release_download_url, "Throne-Mod.zip");
                     if (!res.isEmpty()) {
                         errors += res;
                     }

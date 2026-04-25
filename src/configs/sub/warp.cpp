@@ -5,11 +5,26 @@
 #include <QNetworkRequest>
 #include <include/configs/sub/warp.h>
 #include <include/global/Configs.hpp>
+#include <include/database/ProfilesRepo.h>
 #include <QObject>
 #include <utility>
 
 
 namespace Configs_network {
+    namespace {
+        int resolveProxyPort() {
+            if (Configs::dataManager->settingsRepo->started_port_bound_mode &&
+                !Configs::dataManager->settingsRepo->started_port_bound_ids.isEmpty()) {
+                auto profile = Configs::dataManager->profilesRepo->GetProfile(
+                    Configs::dataManager->settingsRepo->started_port_bound_ids.first());
+                if (profile != nullptr && profile->local_port > 0) {
+                    return profile->local_port;
+                }
+            }
+            return Configs::dataManager->settingsRepo->inbound_socks_port;
+        }
+    }
+
     std::shared_ptr<warpConfig> genWarpConfig(QString *error, QString privateKey, QString publicKey) {
         std::shared_ptr<warpConfig> config = std::make_shared<warpConfig>();
 
@@ -28,14 +43,15 @@ namespace Configs_network {
         accessManager.setTransferTimeout(10000);
         request.setUrl(warpApiURL);
         if (Configs::dataManager->settingsRepo->net_use_proxy || Configs::dataManager->settingsRepo->spmode_system_proxy) {
-            if (Configs::dataManager->settingsRepo->started_id < 0) {
+            if (Configs::dataManager->settingsRepo->started_id < 0 &&
+                !Configs::dataManager->settingsRepo->started_port_bound_mode) {
                 *error = QObject::tr("Request with proxy but no profile started.");
                 return config;
             }
             QNetworkProxy p;
             p.setType(QNetworkProxy::HttpProxy);
             p.setHostName(Configs::dataManager->settingsRepo->inbound_address == "::" ? "127.0.0.1" : Configs::dataManager->settingsRepo->inbound_address);
-            p.setPort(Configs::dataManager->settingsRepo->inbound_socks_port);
+            p.setPort(resolveProxyPort());
             if (Configs::dataManager->settingsRepo->inbound_auth) {
                 p.setUser(Configs::dataManager->settingsRepo->inbound_user);
                 p.setPassword(Configs::dataManager->settingsRepo->inbound_pass);

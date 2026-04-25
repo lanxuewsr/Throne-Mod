@@ -13,7 +13,7 @@
 苹果的平台具有非常严格的安全策略，由于 Nekoray 没有签名证书，所以必须使用 `xattr -d com.apple.quarantine /path/to/nekoray.app` 去掉隔离。 此外，为了使内置的提权起效，“终端”应该具有 “Full Disk” 访问权限。 
 
 ### Github release  (Portable ZIP)
-[![GitHub All Releases](https://img.shields.io/github/downloads/throneproj/Throne/total?label=downloads-total&logo=github&style=flat-square)](https://github.com/throneproj/Throne/releases)
+[![GitHub All Releases](https://img.shields.io/github/downloads/lanxuewsr/Throne-Mod/total?label=downloads-total&logo=github&style=flat-square)](https://github.com/lanxuewsr/Throne-Mod/releases)
 
 
 ## 支持的协议

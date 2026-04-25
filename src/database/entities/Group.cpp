@@ -47,6 +47,7 @@ namespace Configs
             case GroupSortMethod::ByName:
             case GroupSortMethod::ByTestResult:
             case GroupSortMethod::ByTraffic:
+            case GroupSortMethod::ByLocalPort:
             case GroupSortMethod::ByType: {
                 auto get_latency_for_sort = [](const std::shared_ptr<Profile>& prof) {
                     auto i = prof->latency;
@@ -94,6 +95,8 @@ namespace Configs
                                           if (traffic_sort_by == trafficBy::ul) {
                                               return sortAction.descending ? profA->traffic_uplink > profB->traffic_uplink : profA->traffic_uplink < profB->traffic_uplink;
                                           }
+                                      } else if (sortAction.method == GroupSortMethod::ByLocalPort) {
+                                          return sortAction.descending ? profA->local_port > profB->local_port : profA->local_port < profB->local_port;
                                       }
                                       return sortAction.descending ? ms_a > ms_b : ms_a < ms_b;
                                   });

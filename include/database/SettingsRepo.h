@@ -39,6 +39,8 @@ namespace Configs {
         // Running (not saved to DB, runtime state only)
         int core_port = 19810;
         int started_id = -1919;
+        bool started_port_bound_mode = false;
+        QList<int> started_port_bound_ids = {};
         bool core_running = false;
         bool prepare_exit = false;
         bool spmode_vpn = false;

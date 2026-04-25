@@ -704,7 +704,11 @@ void DialogEditProfile::accept() {
         }
     } else {
         auto changed = Configs::dataManager->profilesRepo->Save(ent);
-        if (changed && Configs::dataManager->settingsRepo->started_id == ent->id) msg << "restart";
+        if (changed &&
+            (Configs::dataManager->settingsRepo->started_id == ent->id ||
+             Configs::dataManager->settingsRepo->started_port_bound_ids.contains(ent->id))) {
+            msg << "restart";
+        }
     }
 
     MW_dialog_message(Dialog_DialogEditProfile, msg.join(","));
