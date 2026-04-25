@@ -14,4 +14,8 @@ if [ -z "$ARTIFACT_TGZ" ]; then
   exit 1
 fi
 
-tar xvzf "$ARTIFACT_TGZ" -C "$GITHUB_WORKSPACE"
+ARTIFACT_DIR=$(dirname "$ARTIFACT_TGZ")
+ARTIFACT_FILE=$(basename "$ARTIFACT_TGZ")
+pushd "$ARTIFACT_DIR" >/dev/null
+tar xvzf "$ARTIFACT_FILE" -C "$GITHUB_WORKSPACE"
+popd >/dev/null
