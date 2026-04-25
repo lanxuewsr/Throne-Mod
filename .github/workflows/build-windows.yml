@@ -1,0 +1,103 @@
+name: Build Windows Client
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional label for this build"
+        required: false
+        default: "manual"
+
+jobs:
+  build-core:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    env:
+      DEST: ${{ github.workspace }}/deployment/windows-amd64
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.2"
+          cache-dependency-path: |
+            core/server/go.sum
+
+      - name: Setup Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "31.1"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install protoc Go plugins
+        shell: bash
+        run: |
+          go install github.com/golang/protobuf/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Build Windows core payload
+        shell: bash
+        run: |
+          chmod +x ./script/build_go.sh
+          GOOS=windows GOARCH=amd64 ./script/build_go.sh
+
+      - name: Pack core artifact
+        shell: bash
+        run: tar czvf artifacts.tgz ./deployment
+
+      - name: Upload core artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: throne-mod-common-windows-amd64
+          path: artifacts.tgz
+
+  build-gui:
+    runs-on: windows-latest
+    needs:
+      - build-core
+    permissions:
+      contents: read
+    env:
+      DEST: ${{ github.workspace }}/deployment/windows-amd64
+      DEST_SUFFIX: windows-amd64
+      ARCH: x64
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install MSVC compiler
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: throne-mod-common-windows-amd64
+          path: download-artifact
+
+      - name: Build Windows GUI
+        shell: bash
+        run: |
+          curl -L -o qt.7z https://github.com/throneproj/buildqt/releases/download/Qt_6.11.0/Qt_6.11.0_x64.7z
+          7z x qt.7z
+          curl -L -o openssl.7z https://github.com/throneproj/env_windows_legacy/releases/download/latest/openssl_x64.7z
+          7z x openssl.7z
+          export CMAKE_PREFIX_PATH=$PWD/Qt/lib/cmake
+          export OPENSSL_ROOT_DIR=$PWD/openssl
+          mkdir build
+          cd build
+          curl -fLso srslist.h https://raw.githubusercontent.com/throneproj/routeprofiles/rule-set/srslist.h
+          cmake -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+          ninja
+          cd ..
+          bash ./script/deploy_windows.sh
+
+      - name: Upload Windows client
+        uses: actions/upload-artifact@v4
+        with:
+          name: Throne-Mod-windows-amd64-${{ github.event.inputs.tag }}
+          path: deployment/windows-amd64
