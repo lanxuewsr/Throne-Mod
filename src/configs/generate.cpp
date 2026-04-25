@@ -1306,6 +1306,20 @@ namespace Configs {
             return res;
         }
 
+        QJsonArray proxySelectorOutbounds;
+        for (const auto& profile : profiles) {
+            if (profile == nullptr || profile->local_port <= 0) continue;
+            proxySelectorOutbounds << profileOutboundTags.value(profile->id);
+        }
+        if (!proxySelectorOutbounds.isEmpty()) {
+            ctx->outbounds << QJsonObject{
+                {"type", "selector"},
+                {"tag", "proxy"},
+                {"outbounds", proxySelectorOutbounds},
+                {"default", proxySelectorOutbounds.first().toString()}
+            };
+        }
+
         ctx->outbounds << QJsonObject{
             {"type", "direct"},
             {"tag", "direct"}
