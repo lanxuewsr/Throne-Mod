@@ -16,6 +16,10 @@ fi
 
 ARTIFACT_DIR=$(dirname "$ARTIFACT_TGZ")
 ARTIFACT_FILE=$(basename "$ARTIFACT_TGZ")
+WORKSPACE_POSIX=$(cygpath -u "$GITHUB_WORKSPACE")
+
 pushd "$ARTIFACT_DIR" >/dev/null
-tar xvzf "$ARTIFACT_FILE" -C "$GITHUB_WORKSPACE"
+pushd "$WORKSPACE_POSIX" >/dev/null
+tar xvzf "$(cygpath -u "$ARTIFACT_DIR")/$ARTIFACT_FILE"
+popd >/dev/null
 popd >/dev/null
