@@ -316,12 +316,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     auto *actionCopyPortBoundConfig = new QAction(tr("Copy Port-Bound Config"), this);
     auto *actionStartPortBound = new QAction(tr("Start Port-Bound Profiles"), this);
     auto *actionStopPortBound = new QAction(tr("Stop Port-Bound Profiles"), this);
+    auto *actionSetTunProfile = new QAction(tr("Set as Tun Mode Node"), this);
+    auto *actionClearTunProfile = new QAction(tr("Clear Tun Mode Node"), this);
+    auto *actionSetSystemProxyProfile = new QAction(tr("Set as System Proxy Node"), this);
+    auto *actionClearSystemProxyProfile = new QAction(tr("Clear System Proxy Node"), this);
     ui->menu_server->insertSeparator(ui->menu_export_config);
     ui->menu_server->insertAction(ui->menu_export_config, actionCopyPortBoundConfig);
     ui->menu_server->insertAction(actionCopyPortBoundConfig, actionClearLocalPort);
     ui->menu_server->insertAction(actionClearLocalPort, actionSetLocalPort);
     ui->menu_server->insertAction(actionSetLocalPort, actionStopPortBound);
     ui->menu_server->insertAction(actionStopPortBound, actionStartPortBound);
+    ui->menu_server->insertAction(actionStartPortBound, actionClearSystemProxyProfile);
+    ui->menu_server->insertAction(actionClearSystemProxyProfile, actionSetSystemProxyProfile);
+    ui->menu_server->insertAction(actionSetSystemProxyProfile, actionClearTunProfile);
+    ui->menu_server->insertAction(actionClearTunProfile, actionSetTunProfile);
     connect(actionSetLocalPort, &QAction::triggered, this, [=, this]() { prompt_set_local_port_binding(); });
     connect(actionClearLocalPort, &QAction::triggered, this, [=, this]() { clear_local_port_binding(); });
     connect(actionCopyPortBoundConfig, &QAction::triggered, this, [=, this]() { copy_port_bound_config(); });
@@ -331,6 +339,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         else start_port_bound_profiles();
     });
     connect(actionStopPortBound, &QAction::triggered, this, [=, this]() { profile_stop(false, false, true); });
+    connect(actionSetTunProfile, &QAction::triggered, this, [=, this]() { assign_tun_profile_from_selection(); });
+    connect(actionClearTunProfile, &QAction::triggered, this, [=, this]() { clear_tun_profile(); });
+    connect(actionSetSystemProxyProfile, &QAction::triggered, this, [=, this]() { assign_system_proxy_profile_from_selection(); });
+    connect(actionClearSystemProxyProfile, &QAction::triggered, this, [=, this]() { clear_system_proxy_profile(); });
+
+    labelTunProfileStatus = new QLabel(this);
+    labelSystemProxyProfileStatus = new QLabel(this);
+    labelTunProfileStatus->setTextFormat(Qt::RichText);
+    labelSystemProxyProfileStatus->setTextFormat(Qt::RichText);
+    labelTunProfileStatus->setWordWrap(true);
+    labelSystemProxyProfileStatus->setWordWrap(true);
+    ui->verticalLayout_4->insertWidget(1, labelTunProfileStatus);
+    ui->verticalLayout_4->addWidget(labelSystemProxyProfileStatus);
+    refresh_mode_profile_labels();
     ui->profilesTableView->rowsSwapped = [=,this](int row1, int row2)
     {
         if (!addressFilterString.isEmpty() || !nameFilterString.isEmpty() || !typeFilterString.isEmpty() || !countryFilterString.isEmpty()) return;
@@ -734,6 +756,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         actionCopyPortBoundConfig->setEnabled(!get_port_bound_profiles().isEmpty());
         actionStartPortBound->setEnabled(!get_port_bound_profiles().isEmpty() && !running_port_bound_mode);
         actionStopPortBound->setEnabled(running_port_bound_mode);
+        actionSetTunProfile->setEnabled(selected.count() == 1);
+        actionSetSystemProxyProfile->setEnabled(selected.count() == 1);
+        actionClearTunProfile->setEnabled(Configs::dataManager->settingsRepo->tun_profile_id >= 0);
+        actionClearSystemProxyProfile->setEnabled(Configs::dataManager->settingsRepo->system_proxy_profile_id >= 0);
         if (!speedtestRunning.tryLock()) {
             ui->menu_server->addAction(ui->menu_stop_testing);
         } else {
@@ -1260,10 +1286,7 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
             profile_stop();
         } else if (info.startsWith("CoreStarted")) {
             Configs::IsAdmin(true);
-            if (Configs::dataManager->settingsRepo->remember_spmode.contains("system_proxy")) {
-                set_spmode_system_proxy(true, false);
-            }
-            if (Configs::dataManager->settingsRepo->remember_spmode.contains("vpn") || Configs::dataManager->settingsRepo->flag_restart_tun_on) {
+            if (Configs::dataManager->settingsRepo->flag_restart_tun_on) {
                 set_spmode_vpn(true, false);
             }
             if (Configs::dataManager->settingsRepo->flag_dns_set) {
@@ -1272,6 +1295,8 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
             if (auto id = info.split(",")[1].toInt(); id >= 0)
             {
                 profile_start(id);
+            } else if (!Configs::dataManager->settingsRepo->started_port_bound_mode && !get_port_bound_profiles().isEmpty()) {
+                start_port_bound_profiles();
             }
             if (Configs::dataManager->settingsRepo->system_dns_set) {
                 set_system_dns(true);
@@ -1500,6 +1525,16 @@ void MainWindow::set_spmode_vpn(bool enable, bool save) {
     if (enable == Configs::dataManager->settingsRepo->spmode_vpn) return;
 
     if (enable) {
+        if (get_port_bound_profiles().isEmpty()) {
+            MessageBoxWarning(software_name, tr("Please configure at least one local port mapping first."));
+            refresh_status();
+            return;
+        }
+        if (Configs::dataManager->settingsRepo->tun_profile_id < 0) {
+            MessageBoxWarning(software_name, tr("Please select a Tun mode node first."));
+            refresh_status();
+            return;
+        }
         bool requestPermission = !Configs::IsAdmin();
         if (requestPermission) {
             if (!get_elevated_permissions()) {
@@ -1514,13 +1549,16 @@ void MainWindow::set_spmode_vpn(bool enable, bool save) {
         if (enable) {
             Configs::dataManager->settingsRepo->remember_spmode.append("vpn");
         }
-        Configs::dataManager->settingsRepo->Save();
     }
 
     Configs::dataManager->settingsRepo->spmode_vpn = enable;
+    if (save) {
+        Configs::dataManager->settingsRepo->Save();
+    }
     refresh_status();
 
-    if (Configs::dataManager->settingsRepo->started_port_bound_mode) start_port_bound_profiles();
+    if (!Configs::dataManager->settingsRepo->started_port_bound_mode && !get_port_bound_profiles().isEmpty()) start_port_bound_profiles();
+    else if (Configs::dataManager->settingsRepo->started_port_bound_mode) start_port_bound_profiles();
     else if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
 }
 
@@ -1753,6 +1791,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     }
 
     refresh_speed_label();
+    refresh_mode_profile_labels();
 
     // From UI
     QString group_name;
@@ -2534,6 +2573,18 @@ QList<std::shared_ptr<Configs::Profile>> MainWindow::get_port_bound_profiles(con
     return profiles;
 }
 
+std::shared_ptr<Configs::Profile> MainWindow::get_tun_profile() const {
+    auto id = Configs::dataManager->settingsRepo->tun_profile_id;
+    if (id < 0) return nullptr;
+    return Configs::dataManager->profilesRepo->GetProfile(id);
+}
+
+std::shared_ptr<Configs::Profile> MainWindow::get_system_proxy_profile() const {
+    auto id = Configs::dataManager->settingsRepo->system_proxy_profile_id;
+    if (id < 0) return nullptr;
+    return Configs::dataManager->profilesRepo->GetProfile(id);
+}
+
 std::shared_ptr<Configs::Profile> MainWindow::find_port_binding_conflict(int port, int excludeProfileId) const {
     if (port <= 0) return nullptr;
     for (const auto& profile : get_port_bound_profiles()) {
@@ -2541,6 +2592,92 @@ std::shared_ptr<Configs::Profile> MainWindow::find_port_binding_conflict(int por
         if (profile->local_port == port) return profile;
     }
     return nullptr;
+}
+
+int MainWindow::get_single_selected_profile_id() {
+    auto selected = get_now_selected_list();
+    if (selected.count() != 1) {
+        MessageBoxWarning(software_name, tr("Please single-click and select exactly one profile first."));
+        return -1;
+    }
+    return selected.first();
+}
+
+void MainWindow::assign_tun_profile_from_selection() {
+    auto id = get_single_selected_profile_id();
+    if (id < 0) return;
+    Configs::dataManager->settingsRepo->tun_profile_id = id;
+    Configs::dataManager->settingsRepo->Save();
+    refresh_mode_profile_labels();
+
+    if (Configs::dataManager->settingsRepo->spmode_vpn) {
+        start_port_bound_profiles();
+    }
+}
+
+void MainWindow::assign_system_proxy_profile_from_selection() {
+    auto id = get_single_selected_profile_id();
+    if (id < 0) return;
+    Configs::dataManager->settingsRepo->system_proxy_profile_id = id;
+    Configs::dataManager->settingsRepo->Save();
+    refresh_mode_profile_labels();
+
+    if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
+        if (Configs::dataManager->settingsRepo->started_port_bound_mode) {
+            start_port_bound_profiles();
+        }
+        set_spmode_system_proxy(true, false);
+    }
+}
+
+void MainWindow::clear_tun_profile() {
+    Configs::dataManager->settingsRepo->tun_profile_id = -1;
+    Configs::dataManager->settingsRepo->Save();
+    if (Configs::dataManager->settingsRepo->spmode_vpn) {
+        set_spmode_vpn(false, false);
+    }
+    refresh_mode_profile_labels();
+}
+
+void MainWindow::clear_system_proxy_profile() {
+    Configs::dataManager->settingsRepo->system_proxy_profile_id = -1;
+    Configs::dataManager->settingsRepo->Save();
+    if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
+        set_spmode_system_proxy(false, false);
+    }
+    refresh_mode_profile_labels();
+}
+
+void MainWindow::refresh_mode_profile_labels() {
+    if (!labelTunProfileStatus || !labelSystemProxyProfileStatus) return;
+
+    auto tunProfile = get_tun_profile();
+    if (tunProfile) {
+        labelTunProfileStatus->setText(
+            QString("<span style='color:#1f9d55;'>%1 %2</span>")
+                .arg(tr("Current active node:"))
+                .arg(tunProfile->outbound->DisplayTypeAndName().toHtmlEscaped())
+        );
+    } else {
+        labelTunProfileStatus->setText(
+            QString("<span style='color:#d64545;'>%1</span>")
+                .arg(tr("Currently no active node"))
+        );
+    }
+
+    auto systemProxyProfile = get_system_proxy_profile();
+    if (systemProxyProfile) {
+        labelSystemProxyProfileStatus->setText(
+            QString("<span style='color:#1f9d55;'>%1 %2</span>")
+                .arg(tr("Current active node:"))
+                .arg(systemProxyProfile->outbound->DisplayTypeAndName().toHtmlEscaped())
+        );
+    } else {
+        labelSystemProxyProfileStatus->setText(
+            QString("<span style='color:#d64545;'>%1</span>")
+                .arg(tr("Currently no active node"))
+        );
+    }
 }
 
 void MainWindow::prompt_set_local_port_binding() {
@@ -2605,7 +2742,11 @@ void MainWindow::copy_port_bound_config() {
         return;
     }
 
-    auto result = Configs::BuildPortBoundConfig(profiles);
+    auto result = Configs::BuildPortBoundConfig(
+        profiles,
+        Configs::dataManager->settingsRepo->spmode_vpn ? Configs::dataManager->settingsRepo->tun_profile_id : -1,
+        Configs::dataManager->settingsRepo->spmode_system_proxy ? Configs::dataManager->settingsRepo->system_proxy_profile_id : -1
+    );
     if (!result || !result->error.isEmpty()) {
         MessageBoxWarning(tr("Build config error"), result ? result->error : tr("Unknown build error"));
         return;

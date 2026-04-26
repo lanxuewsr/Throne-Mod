@@ -862,19 +862,20 @@ void MainWindow::start_port_bound_profiles(const QList<int>& profileIds) {
     }
 #endif
 
-    if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
-        MessageBoxWarning(tr("Invalid Operation"),
-                          tr("Port-bound mode cannot be started while system proxy mode is enabled."));
-        return;
-    }
-
     auto profiles = get_port_bound_profiles(profileIds);
     if (profiles.isEmpty()) {
         MessageBoxWarning(tr("Nothing to start"), tr("No profiles are bound to local ports."));
         return;
     }
 
-    auto result = Configs::BuildPortBoundConfig(profiles);
+    const int tunProfileId = Configs::dataManager->settingsRepo->spmode_vpn
+        ? Configs::dataManager->settingsRepo->tun_profile_id
+        : -1;
+    const int systemProxyProfileId = Configs::dataManager->settingsRepo->spmode_system_proxy
+        ? Configs::dataManager->settingsRepo->system_proxy_profile_id
+        : -1;
+
+    auto result = Configs::BuildPortBoundConfig(profiles, tunProfileId, systemProxyProfileId);
     if (!result || !result->error.isEmpty()) {
         MessageBoxWarning(tr("BuildConfig return error"), result ? result->error : tr("Unknown build error"));
         return;
@@ -983,20 +984,19 @@ void MainWindow::set_spmode_system_proxy(bool enable, bool save) {
         ui->checkBox_SystemProxy->setChecked(false);
         return;
     }
-    if (enable && running_port_bound_mode) {
+    if (enable && get_port_bound_profiles().isEmpty()) {
         runOnUiThread([=] {
-            MessageBoxWarning("Invalid Operation", "Cannot enable system proxy while port-bound mode is running.");
+            MessageBoxWarning("Invalid Operation", tr("Please configure at least one local port mapping first."));
         });
         ui->checkBox_SystemProxy->setChecked(false);
         return;
     }
-    if (enable != Configs::dataManager->settingsRepo->spmode_system_proxy) {
-        if (enable) {
-            auto socks_port = Configs::dataManager->settingsRepo->inbound_socks_port;
-            SetSystemProxy(socks_port, socks_port, Configs::dataManager->settingsRepo->proxy_scheme);
-        } else {
-            ClearSystemProxy();
-        }
+    if (enable && Configs::dataManager->settingsRepo->system_proxy_profile_id < 0) {
+        runOnUiThread([=] {
+            MessageBoxWarning("Invalid Operation", tr("Please select a system proxy node first."));
+        });
+        ui->checkBox_SystemProxy->setChecked(false);
+        return;
     }
 
     if (save) {
@@ -1004,10 +1004,24 @@ void MainWindow::set_spmode_system_proxy(bool enable, bool save) {
         if (enable && Configs::dataManager->settingsRepo->remember_enable) {
             Configs::dataManager->settingsRepo->remember_spmode.append("system_proxy");
         }
-        Configs::dataManager->settingsRepo->Save();
     }
 
     Configs::dataManager->settingsRepo->spmode_system_proxy = enable;
+    if (save) {
+        Configs::dataManager->settingsRepo->Save();
+    }
+
+    if (enable) {
+        if (!Configs::dataManager->settingsRepo->started_port_bound_mode && !get_port_bound_profiles().isEmpty()) {
+            start_port_bound_profiles();
+        } else if (Configs::dataManager->settingsRepo->started_port_bound_mode) {
+            start_port_bound_profiles();
+        }
+        auto socks_port = Configs::dataManager->settingsRepo->inbound_socks_port;
+        SetSystemProxy(socks_port, socks_port, Configs::dataManager->settingsRepo->proxy_scheme);
+    } else {
+        ClearSystemProxy();
+    }
     refresh_status();
 }
 

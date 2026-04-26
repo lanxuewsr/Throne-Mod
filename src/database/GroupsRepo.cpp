@@ -261,6 +261,21 @@ namespace Configs {
     }
 
     void GroupsRepo::DeleteGroup(int id) {
+        auto group = loadFromDatabase(id);
+        if (group != nullptr && Configs::dataManager && Configs::dataManager->settingsRepo) {
+            bool settingsChanged = false;
+            if (group->profiles.contains(Configs::dataManager->settingsRepo->tun_profile_id)) {
+                Configs::dataManager->settingsRepo->tun_profile_id = -1;
+                settingsChanged = true;
+            }
+            if (group->profiles.contains(Configs::dataManager->settingsRepo->system_proxy_profile_id)) {
+                Configs::dataManager->settingsRepo->system_proxy_profile_id = -1;
+                settingsChanged = true;
+            }
+            if (settingsChanged) {
+                Configs::dataManager->settingsRepo->Save();
+            }
+        }
         QMutexLocker locker(&mutex);
         memMap.erase(id);
         db.exec("DELETE FROM groups_order WHERE group_id = ?", id);

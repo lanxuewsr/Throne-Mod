@@ -566,6 +566,18 @@ namespace Configs {
             std::vector<int> idVec(ids.begin(), ids.end());
             db.execDeleteByIdIn("profiles", "id", idVec);
         }
+        bool settingsChanged = false;
+        if (ids.contains(dataManager->settingsRepo->tun_profile_id)) {
+            dataManager->settingsRepo->tun_profile_id = -1;
+            settingsChanged = true;
+        }
+        if (ids.contains(dataManager->settingsRepo->system_proxy_profile_id)) {
+            dataManager->settingsRepo->system_proxy_profile_id = -1;
+            settingsChanged = true;
+        }
+        if (settingsChanged) {
+            dataManager->settingsRepo->Save();
+        }
         return true;
     }
 

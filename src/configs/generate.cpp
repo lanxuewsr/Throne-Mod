@@ -1181,7 +1181,7 @@ namespace Configs {
         return ctx->buildConfigResult;
     }
 
-    std::shared_ptr<BuildConfigResult> BuildPortBoundConfig(const QList<std::shared_ptr<Profile>>& profiles)
+    std::shared_ptr<BuildConfigResult> BuildPortBoundConfig(const QList<std::shared_ptr<Profile>>& profiles, int tunProfileId, int systemProxyProfileId)
     {
         auto res = std::make_shared<BuildConfigResult>();
         if (profiles.isEmpty()) {
@@ -1198,12 +1198,15 @@ namespace Configs {
         }
 
         QMap<int, int> portOwners;
+        QList<std::shared_ptr<Profile>> configProfiles = profiles;
+        QSet<int> configProfileIds;
         QList<int> directDomainIDs;
         int xrayCount = 0;
         int chainCount = 0;
 
         for (const auto& profile : profiles) {
             if (profile == nullptr || profile->local_port <= 0) continue;
+            configProfileIds.insert(profile->id);
 
             if (portOwners.contains(profile->local_port)) {
                 auto other = Configs::dataManager->profilesRepo->GetProfile(portOwners[profile->local_port]);
@@ -1240,6 +1243,32 @@ namespace Configs {
             if (profile->type == "chain") chainCount++;
         }
 
+        auto appendExtraProfile = [&](int profileId, const QString& purpose) -> bool {
+            if (profileId < 0 || configProfileIds.contains(profileId)) return true;
+            auto profile = Configs::dataManager->profilesRepo->GetProfile(profileId);
+            if (profile == nullptr) {
+                res->error = QString("%1 profile is missing.").arg(purpose);
+                return false;
+            }
+            if (!IsValid(profile)) {
+                res->error = QString("Invalid %1 profile: %2").arg(purpose, profile->outbound->DisplayTypeAndName());
+                return false;
+            }
+            configProfiles << profile;
+            configProfileIds.insert(profileId);
+            directDomainIDs << profileId;
+            if (profile->outbound->IsXray()) xrayCount++;
+            if (profile->type == "chain") chainCount++;
+            return true;
+        };
+
+        if (ctx->tunEnabled && !appendExtraProfile(tunProfileId, "Tun mode")) {
+            return res;
+        }
+        if (Configs::dataManager->settingsRepo->spmode_system_proxy && !appendExtraProfile(systemProxyProfileId, "System proxy")) {
+            return res;
+        }
+
         if (portOwners.isEmpty()) {
             res->error = "No profiles are bound to local ports.";
             return res;
@@ -1263,15 +1292,14 @@ namespace Configs {
         int xrayPortIdx = 0;
         QMap<int, QString> profileInboundTags;
         QMap<int, QString> profileOutboundTags;
-
-        for (const auto& profile : profiles) {
-            if (profile == nullptr || profile->local_port <= 0) continue;
+        auto buildProfileOutbounds = [&](const std::shared_ptr<Profile>& profile) -> bool {
+            if (profile == nullptr) return true;
 
             auto ids = unwrapChain(profile->id);
             auto group = Configs::dataManager->groupsRepo->GetGroup(profile->gid);
             if (group == nullptr) {
                 res->error = "Profile group is missing, data is corrupted.";
-                return res;
+                return false;
             }
             if (group->landing_proxy_id >= 0) ids.prepend(group->landing_proxy_id);
             if (group->front_proxy_id >= 0) ids.append(group->front_proxy_id);
@@ -1291,12 +1319,21 @@ namespace Configs {
             buildOutboundChain(ctx, ids, prefix, false, true, singToXrayPort, xrayToSingPort);
             if (!ctx->error.isEmpty()) {
                 res->error = ctx->error;
-                return res;
+                return false;
             }
 
-            profileInboundTags.insert(profile->id, prefix + "-in");
+            if (profile->local_port > 0) {
+                profileInboundTags.insert(profile->id, prefix + "-in");
+            }
             profileOutboundTags.insert(profile->id, prefix + "-0");
             if (ids.size() > 1) ctx->buildConfigResult->isChained = true;
+            return true;
+        };
+
+        for (const auto& profile : configProfiles) {
+            if (!buildProfileOutbounds(profile)) {
+                return res;
+            }
         }
 
         buildExperimentalSection(ctx);
@@ -1306,9 +1343,27 @@ namespace Configs {
             return res;
         }
 
+        QString tunOutboundTag;
+        if (ctx->tunEnabled) {
+            if (tunProfileId < 0 || !profileOutboundTags.contains(tunProfileId)) {
+                res->error = "Tun mode is enabled but no active Tun profile is selected.";
+                return res;
+            }
+            tunOutboundTag = profileOutboundTags.value(tunProfileId);
+        }
+
+        QString systemProxyOutboundTag;
+        if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
+            if (systemProxyProfileId < 0 || !profileOutboundTags.contains(systemProxyProfileId)) {
+                res->error = "System proxy is enabled but no active system proxy profile is selected.";
+                return res;
+            }
+            systemProxyOutboundTag = profileOutboundTags.value(systemProxyProfileId);
+        }
+
         QJsonArray proxySelectorOutbounds;
-        for (const auto& profile : profiles) {
-            if (profile == nullptr || profile->local_port <= 0) continue;
+        for (const auto& profile : configProfiles) {
+            if (profile == nullptr) continue;
             proxySelectorOutbounds << profileOutboundTags.value(profile->id);
         }
         if (!proxySelectorOutbounds.isEmpty()) {
@@ -1333,6 +1388,37 @@ namespace Configs {
             {"listen_port", dataManager->settingsRepo->core_dns_in_port}
         };
 
+        if (ctx->tunEnabled) {
+            auto tunDeps = ctx->buildPrerequisities->tunDeps;
+            QJsonObject tunInbound{
+                {"tag", "tun-in"},
+                {"type", "tun"},
+                {"interface_name", genTunName()},
+                {"auto_route", true},
+                {"mtu", Configs::dataManager->settingsRepo->vpn_mtu},
+                {"stack", Configs::dataManager->settingsRepo->vpn_implementation},
+                {"strict_route", Configs::dataManager->settingsRepo->vpn_strict_route}
+            };
+            if (ctx->os == Linux) tunInbound["auto_redirect"] = true;
+
+            const auto tunIPv4CIDR = Configs::dataManager->settingsRepo->vpn_tun_ipv4_cidr;
+            const auto tunIPv6CIDR = Configs::dataManager->settingsRepo->vpn_tun_ipv6_cidr;
+            ctx->buildConfigResult->tunIPv4CIDR = tunIPv4CIDR;
+            auto tunAddress = QJsonArray{tunIPv4CIDR};
+            if (Configs::dataManager->settingsRepo->vpn_ipv6) tunAddress += tunIPv6CIDR;
+            tunInbound["address"] = tunAddress;
+
+            QJsonArray routeExcludeAddrs = {"127.0.0.0/8"};
+            QJsonArray routeExcludeSets;
+            if (Configs::dataManager->settingsRepo->enable_tun_routing) {
+                for (auto item: tunDeps->directIPCIDRs) routeExcludeAddrs << item;
+                for (auto item: tunDeps->directIPSets) routeExcludeSets << item;
+            }
+            tunInbound["route_exclude_address"] = routeExcludeAddrs;
+            if (!routeExcludeSets.isEmpty()) tunInbound["route_exclude_address_set"] = routeExcludeSets;
+            inboundArr << tunInbound;
+        }
+
         for (const auto& profile : profiles) {
             if (profile == nullptr || profile->local_port <= 0) continue;
 
@@ -1351,6 +1437,39 @@ namespace Configs {
                 };
             }
             inboundArr << inboundObj;
+        }
+
+        if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
+            bool proxyPortUsedByAnotherProfile = false;
+            if (portOwners.contains(Configs::dataManager->settingsRepo->inbound_socks_port) &&
+                portOwners.value(Configs::dataManager->settingsRepo->inbound_socks_port) != systemProxyProfileId) {
+                proxyPortUsedByAnotherProfile = true;
+            }
+            if (proxyPortUsedByAnotherProfile) {
+                res->error = QString("System proxy port %1 conflicts with another local port binding.")
+                                 .arg(Configs::dataManager->settingsRepo->inbound_socks_port);
+                return res;
+            }
+
+            if (!(profileInboundTags.contains(systemProxyProfileId) &&
+                  Configs::dataManager->profilesRepo->GetProfile(systemProxyProfileId) &&
+                  Configs::dataManager->profilesRepo->GetProfile(systemProxyProfileId)->local_port == Configs::dataManager->settingsRepo->inbound_socks_port)) {
+                QJsonObject mixedInbound{
+                    {"tag", "mixed-in"},
+                    {"type", "mixed"},
+                    {"listen", Configs::dataManager->settingsRepo->inbound_address},
+                    {"listen_port", Configs::dataManager->settingsRepo->inbound_socks_port}
+                };
+                if (Configs::dataManager->settingsRepo->inbound_auth) {
+                    mixedInbound["users"] = QJsonArray{
+                        QJsonObject{
+                            {"username", Configs::dataManager->settingsRepo->inbound_user},
+                            {"password", Configs::dataManager->settingsRepo->inbound_pass}
+                        }
+                    };
+                }
+                inboundArr << mixedInbound;
+            }
         }
 
         if (ctx->xrayToSingBridges.size() != ctx->singIngressTags.size()) {
@@ -1375,6 +1494,29 @@ namespace Configs {
         }
 
         QJsonArray routeRules;
+        if (Configs::dataManager->settingsRepo->sniffing_mode != SniffingMode::DISABLE) {
+            QJsonArray sniffInbounds;
+            if (Configs::dataManager->settingsRepo->spmode_system_proxy) sniffInbounds << "mixed-in";
+            if (ctx->tunEnabled) sniffInbounds << "tun-in";
+            if (!sniffInbounds.isEmpty()) {
+                routeRules << QJsonObject{
+                    {"action", "sniff"},
+                    {"inbound", sniffInbounds}
+                };
+            }
+        }
+        if (!Configs::dataManager->settingsRepo->resolve_domain_strategy.isEmpty()) {
+            QJsonArray resolveInbounds;
+            if (Configs::dataManager->settingsRepo->spmode_system_proxy) resolveInbounds << "mixed-in";
+            if (ctx->tunEnabled) resolveInbounds << "tun-in";
+            if (!resolveInbounds.isEmpty()) {
+                routeRules << QJsonObject{
+                    {"action", "resolve"},
+                    {"strategy", Configs::dataManager->settingsRepo->resolve_domain_strategy},
+                    {"inbound", resolveInbounds}
+                };
+            }
+        }
         routeRules << QJsonObject{
             {"inbound", "dns-in"},
             {"action", "sniff"},
@@ -1411,9 +1553,17 @@ namespace Configs {
             };
         }
 
+        if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
+            routeRules << QJsonObject{
+                {"inbound", "mixed-in"},
+                {"action", "route"},
+                {"outbound", systemProxyOutboundTag}
+            };
+        }
+
         QJsonObject route{
             {"rules", routeRules},
-            {"final", "direct"},
+            {"final", ctx->tunEnabled ? tunOutboundTag : QString("direct")},
             {"auto_detect_interface", true},
             {"default_domain_resolver", QJsonObject{
                  {"server", "dns-direct"},

@@ -166,7 +166,10 @@ namespace Configs
 
     std::shared_ptr<BuildConfigResult> BuildSingBoxConfig(const std::shared_ptr<Profile> &ent);
 
-    std::shared_ptr<BuildConfigResult> BuildPortBoundConfig(const QList<std::shared_ptr<Profile>> &profiles);
+    std::shared_ptr<BuildConfigResult> BuildPortBoundConfig(
+        const QList<std::shared_ptr<Profile>> &profiles,
+        int tunProfileId = -1,
+        int systemProxyProfileId = -1);
 
     class BuildTestConfigResult {
     public:

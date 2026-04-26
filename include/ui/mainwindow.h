@@ -26,6 +26,7 @@
 #include <QSemaphore>
 #include <QMutex>
 #include <QThreadPool>
+#include <QLabel>
 
 #include "group/GroupSort.hpp"
 #include "include/global/GuiUtils.hpp"
@@ -204,6 +205,8 @@ private:
     int toolTipID;
     //
     SpeedWidget *speedChartWidget;
+    QLabel *labelTunProfileStatus = nullptr;
+    QLabel *labelSystemProxyProfileStatus = nullptr;
     //
     // for data view
     QDateTime lastUpdated = QDateTime::currentDateTime();
@@ -247,7 +250,23 @@ private:
 
     QList<std::shared_ptr<Configs::Profile>> get_port_bound_profiles(const QList<int>& profileIds = {}) const;
 
+    std::shared_ptr<Configs::Profile> get_tun_profile() const;
+
+    std::shared_ptr<Configs::Profile> get_system_proxy_profile() const;
+
     std::shared_ptr<Configs::Profile> find_port_binding_conflict(int port, int excludeProfileId = -1) const;
+
+    int get_single_selected_profile_id();
+
+    void assign_tun_profile_from_selection();
+
+    void assign_system_proxy_profile_from_selection();
+
+    void clear_tun_profile();
+
+    void clear_system_proxy_profile();
+
+    void refresh_mode_profile_labels();
 
     void prompt_set_local_port_binding();
 

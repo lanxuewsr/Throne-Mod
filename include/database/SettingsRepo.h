@@ -41,6 +41,8 @@ namespace Configs {
         int started_id = -1919;
         bool started_port_bound_mode = false;
         QList<int> started_port_bound_ids = {};
+        int tun_profile_id = -1;
+        int system_proxy_profile_id = -1;
         bool core_running = false;
         bool prepare_exit = false;
         bool spmode_vpn = false;

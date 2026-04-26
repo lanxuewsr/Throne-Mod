@@ -76,7 +76,9 @@ namespace Configs {
             "sniffing_mode",
             "ruleset_mirror",
             "xray_vless_preference",
-            "core_dns_in_port"
+            "core_dns_in_port",
+            "tun_profile_id",
+            "system_proxy_profile_id"
         };
 
         const QSet<QString> stringListKeys = {
@@ -353,6 +355,8 @@ namespace Configs {
                 else if (key == "skip_delete_confirmation") skip_delete_confirmation = varValue.toBool();
                 else if (key == "xray_vless_preference") xray_vless_preference = static_cast<Xray::XrayVlessPreference>(varValue.toInt());
                 else if (key == "core_dns_in_port") core_dns_in_port = varValue.toInt();
+                else if (key == "tun_profile_id") tun_profile_id = varValue.toInt();
+                else if (key == "system_proxy_profile_id") system_proxy_profile_id = varValue.toInt();
                 else if (key == "enable_warp") enable_warp = varValue.toBool();
                 else if (key == "warp_private_key") warp_private_key = varValue.toString();
                 else if (key == "warp_public_key") warp_public_key = varValue.toString();
@@ -485,6 +489,8 @@ namespace Configs {
             {"skip_delete_confirmation", skip_delete_confirmation},
             {"xray_vless_preference", xray_vless_preference},
             {"core_dns_in_port", core_dns_in_port},
+            {"tun_profile_id", tun_profile_id},
+            {"system_proxy_profile_id", system_proxy_profile_id},
             {"enable_warp", enable_warp},
             {"warp_private_key", warp_private_key},
             {"warp_public_key", warp_public_key},
