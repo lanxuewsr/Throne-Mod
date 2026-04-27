@@ -141,6 +141,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->masterLogBrowser->setUndoRedoEnabled(false);
     ui->masterLogBrowser->setDocument(qvLogDocument);
     ui->masterLogBrowser->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    ui->logDataSplitter->setStretchFactor(0, 1);
+    ui->logDataSplitter->setStretchFactor(1, 1);
+    ui->logDataSplitter->setSizes({1, 0});
     updateLogFilterFields();
     runOnThread([=, this] {
         log_process_loop();
@@ -1068,8 +1071,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     if (!Configs::dataManager->settingsRepo->flag_tray) show();
 
-    ui->data_view->setStyleSheet("background: transparent; border: none;");
-    ui->data_view->document()->setDocumentMargin(0);
+    ui->data_view->document()->setDocumentMargin(6);
     ui->data_view->hide();
 }
 
@@ -1596,8 +1598,20 @@ void MainWindow::UpdateDataView(bool force)
     }
     auto html = dataViewHtmlGenerator_.buildHtml();
     runOnUiThread([=, this] {
-        ui->data_view->setVisible(!html.trimmed().isEmpty());
+        const bool hasHtml = !html.trimmed().isEmpty();
+        const bool wasVisible = ui->data_view->isVisible();
+        if (!hasHtml) {
+            ui->data_view->clear();
+            ui->data_view->hide();
+            ui->logDataSplitter->setSizes({1, 0});
+            return;
+        }
+
         ui->data_view->setHtml(html);
+        ui->data_view->show();
+        if (!wasVisible || ui->logDataSplitter->sizes().value(1) == 0) {
+            ui->logDataSplitter->setSizes({1, 1});
+        }
     }, true);
     lastUpdated = QDateTime::currentDateTime();
 }
