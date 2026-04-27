@@ -344,14 +344,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(actionSetSystemProxyProfile, &QAction::triggered, this, [=, this]() { assign_system_proxy_profile_from_selection(); });
     connect(actionClearSystemProxyProfile, &QAction::triggered, this, [=, this]() { clear_system_proxy_profile(); });
 
-    labelTunProfileStatus = new QLabel(this);
-    labelSystemProxyProfileStatus = new QLabel(this);
+    labelTunProfileStatus = ui->labelTunProfileStatus;
+    labelSystemProxyProfileStatus = ui->labelSystemProxyProfileStatus;
     labelTunProfileStatus->setTextFormat(Qt::RichText);
     labelSystemProxyProfileStatus->setTextFormat(Qt::RichText);
-    labelTunProfileStatus->setWordWrap(true);
-    labelSystemProxyProfileStatus->setWordWrap(true);
-    ui->verticalLayout_4->insertWidget(1, labelTunProfileStatus);
-    ui->verticalLayout_4->addWidget(labelSystemProxyProfileStatus);
     refresh_mode_profile_labels();
     ui->profilesTableView->rowsSwapped = [=,this](int row1, int row2)
     {
