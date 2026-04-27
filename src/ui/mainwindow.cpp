@@ -76,15 +76,19 @@ QString buildModeStatusHtml(QLabel *label, const QString &prefix, const QString 
     QString elidedDetail = detail;
     if (label != nullptr && !detail.isEmpty()) {
         const int availableWidth = qMax(label->contentsRect().width(), 240);
-        const int prefixWidth = label->fontMetrics().horizontalAdvance(prefix + " ");
+        const int prefixWidth = prefix.isEmpty() ? 0 : label->fontMetrics().horizontalAdvance(prefix + " ");
         const int detailWidth = qMax(availableWidth - prefixWidth - 12, 120);
         elidedDetail = label->fontMetrics().elidedText(detail, Qt::ElideMiddle, detailWidth);
     }
 
-    QString html = QString("<span style='color:%1;'>%2</span>")
-                       .arg(prefixColor, prefix.toHtmlEscaped());
+    QString html;
+    if (!prefix.isEmpty()) {
+        html = QString("<span style='color:%1;'>%2</span>")
+                   .arg(prefixColor, prefix.toHtmlEscaped());
+    }
     if (!elidedDetail.isEmpty()) {
-        html += QString(" <span style='color:%1; font-weight:600;'>%2</span>")
+        html += QString("%1<span style='color:%2; font-weight:600;'>%3</span>")
+                    .arg(html.isEmpty() ? "" : " ")
                     .arg(detailColor, elidedDetail.toHtmlEscaped());
     }
     return html;
@@ -2678,7 +2682,7 @@ void MainWindow::refresh_mode_profile_labels() {
     if (tunProfile) {
         const auto fullName = tunProfile->outbound->DisplayTypeAndName();
         labelTunProfileStatus->setText(buildModeStatusHtml(
-            labelTunProfileStatus, tr("Current active node:"), fullName, "#6b7280", "#1f9d55"));
+            labelTunProfileStatus, "", fullName, "#6b7280", "#1f9d55"));
         labelTunProfileStatus->setToolTip(fullName);
     } else {
         const auto text = tr("Currently no active node");
@@ -2690,7 +2694,7 @@ void MainWindow::refresh_mode_profile_labels() {
     if (systemProxyProfile) {
         const auto fullName = systemProxyProfile->outbound->DisplayTypeAndName();
         labelSystemProxyProfileStatus->setText(buildModeStatusHtml(
-            labelSystemProxyProfileStatus, tr("Current active node:"), fullName, "#6b7280", "#1f9d55"));
+            labelSystemProxyProfileStatus, "", fullName, "#6b7280", "#1f9d55"));
         labelSystemProxyProfileStatus->setToolTip(fullName);
     } else {
         const auto text = tr("Currently no active node");
