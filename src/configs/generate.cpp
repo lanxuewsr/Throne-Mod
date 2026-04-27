@@ -1184,10 +1184,6 @@ namespace Configs {
     std::shared_ptr<BuildConfigResult> BuildPortBoundConfig(const QList<std::shared_ptr<Profile>>& profiles, int tunProfileId, int systemProxyProfileId)
     {
         auto res = std::make_shared<BuildConfigResult>();
-        if (profiles.isEmpty()) {
-            res->error = "No profiles are bound to local ports.";
-            return res;
-        }
 
         auto ctx = std::make_shared<BuildSingBoxConfigContext>();
         ctx->forExport = true;
@@ -1204,6 +1200,35 @@ namespace Configs {
         int xrayCount = 0;
         int chainCount = 0;
 
+        auto validateMergeableProfile = [&](const std::shared_ptr<Profile>& profile, const QString& purpose) -> bool {
+            if (profile == nullptr) {
+                res->error = QString("%1 profile is missing.").arg(purpose);
+                return false;
+            }
+
+            if (profile->type == "extracore" || profile->type == "tailscale") {
+                res->error = QString("Profile %1 is not supported in combined mode config.")
+                                 .arg(profile->outbound->DisplayTypeAndName());
+                return false;
+            }
+
+            if (profile->type == "custom") {
+                auto custom = profile->Custom();
+                if (custom != nullptr && custom->type == "fullconfig") {
+                    res->error = QString("Custom full-config profile %1 cannot be merged into a combined mode config.")
+                                     .arg(profile->outbound->DisplayTypeAndName());
+                    return false;
+                }
+            }
+
+            if (!IsValid(profile)) {
+                res->error = QString("Invalid %1 profile: %2").arg(purpose, profile->outbound->DisplayTypeAndName());
+                return false;
+            }
+
+            return true;
+        };
+
         for (const auto& profile : profiles) {
             if (profile == nullptr || profile->local_port <= 0) continue;
             configProfileIds.insert(profile->id);
@@ -1217,23 +1242,7 @@ namespace Configs {
                 return res;
             }
 
-            if (profile->type == "extracore" || profile->type == "tailscale") {
-                res->error = QString("Profile %1 is not supported in port-bound config.")
-                                 .arg(profile->outbound->DisplayTypeAndName());
-                return res;
-            }
-
-            if (profile->type == "custom") {
-                auto custom = profile->Custom();
-                if (custom != nullptr && custom->type == "fullconfig") {
-                    res->error = QString("Custom full-config profile %1 cannot be merged into a port-bound config.")
-                                     .arg(profile->outbound->DisplayTypeAndName());
-                    return res;
-                }
-            }
-
-            if (!IsValid(profile)) {
-                res->error = QString("Invalid profile: %1").arg(profile->outbound->DisplayTypeAndName());
+            if (!validateMergeableProfile(profile, "Combined mode")) {
                 return res;
             }
 
@@ -1246,12 +1255,7 @@ namespace Configs {
         auto appendExtraProfile = [&](int profileId, const QString& purpose) -> bool {
             if (profileId < 0 || configProfileIds.contains(profileId)) return true;
             auto profile = Configs::dataManager->profilesRepo->GetProfile(profileId);
-            if (profile == nullptr) {
-                res->error = QString("%1 profile is missing.").arg(purpose);
-                return false;
-            }
-            if (!IsValid(profile)) {
-                res->error = QString("Invalid %1 profile: %2").arg(purpose, profile->outbound->DisplayTypeAndName());
+            if (!validateMergeableProfile(profile, purpose)) {
                 return false;
             }
             configProfiles << profile;
@@ -1269,8 +1273,8 @@ namespace Configs {
             return res;
         }
 
-        if (portOwners.isEmpty()) {
-            res->error = "No profiles are bound to local ports.";
+        if (configProfiles.isEmpty()) {
+            res->error = "No local port mappings or active Tun/System Proxy profiles were selected.";
             return res;
         }
 

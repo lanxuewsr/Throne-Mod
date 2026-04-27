@@ -863,17 +863,18 @@ void MainWindow::start_port_bound_profiles(const QList<int>& profileIds) {
 #endif
 
     auto profiles = get_port_bound_profiles(profileIds);
-    if (profiles.isEmpty()) {
-        MessageBoxWarning(tr("Nothing to start"), tr("No profiles are bound to local ports."));
-        return;
-    }
-
     const int tunProfileId = Configs::dataManager->settingsRepo->spmode_vpn
         ? Configs::dataManager->settingsRepo->tun_profile_id
         : -1;
     const int systemProxyProfileId = Configs::dataManager->settingsRepo->spmode_system_proxy
         ? Configs::dataManager->settingsRepo->system_proxy_profile_id
         : -1;
+    const QString startLabel = current_combined_mode_label(profiles);
+
+    if (profiles.isEmpty() && tunProfileId < 0 && systemProxyProfileId < 0) {
+        MessageBoxWarning(tr("Nothing to start"), tr("No local port mappings or active Tun/System Proxy nodes are selected."));
+        return;
+    }
 
     auto result = Configs::BuildPortBoundConfig(profiles, tunProfileId, systemProxyProfileId);
     if (!result || !result->error.isEmpty()) {
@@ -881,8 +882,7 @@ void MainWindow::start_port_bound_profiles(const QList<int>& profileIds) {
         return;
     }
 
-    QList<int> startedIds;
-    for (const auto& profile : profiles) startedIds << profile->id;
+    const QList<int> startedIds = build_combined_mode_profile_ids(profiles);
 
     auto start_stage2 = [=, this]() {
         libcore::LoadConfigReq req;
@@ -962,9 +962,9 @@ void MainWindow::start_port_bound_profiles(const QList<int>& profileIds) {
             mu_stopping.unlock();
         }
 
-        MW_show_log(">>>>>>>> " + tr("Starting port-bound profiles"));
+        MW_show_log(">>>>>>>> " + tr("Starting %1").arg(startLabel));
         if (!start_stage2()) {
-            MW_show_log("<<<<<<<< " + tr("Failed to start port-bound profiles"));
+            MW_show_log("<<<<<<<< " + tr("Failed to start %1").arg(startLabel));
         }
         mu_starting.unlock();
 
@@ -980,13 +980,6 @@ void MainWindow::set_spmode_system_proxy(bool enable, bool save) {
     if (enable && Configs::dataManager->settingsRepo->disable_mixed_inbound) {
         runOnUiThread([=] {
            MessageBoxWarning("Invalid Operation", "Cannot set system proxy when mixed inbound is disabled.");
-        });
-        ui->checkBox_SystemProxy->setChecked(false);
-        return;
-    }
-    if (enable && get_port_bound_profiles().isEmpty()) {
-        runOnUiThread([=] {
-            MessageBoxWarning("Invalid Operation", tr("Please configure at least one local port mapping first."));
         });
         ui->checkBox_SystemProxy->setChecked(false);
         return;
@@ -1012,15 +1005,17 @@ void MainWindow::set_spmode_system_proxy(bool enable, bool save) {
     }
 
     if (enable) {
-        if (!Configs::dataManager->settingsRepo->started_port_bound_mode && !get_port_bound_profiles().isEmpty()) {
-            start_port_bound_profiles();
-        } else if (Configs::dataManager->settingsRepo->started_port_bound_mode) {
+        if (has_combined_mode_start_request()) {
             start_port_bound_profiles();
         }
         auto socks_port = Configs::dataManager->settingsRepo->inbound_socks_port;
         SetSystemProxy(socks_port, socks_port, Configs::dataManager->settingsRepo->proxy_scheme);
     } else {
         ClearSystemProxy();
+        if (Configs::dataManager->settingsRepo->started_port_bound_mode) {
+            if (has_combined_mode_start_request()) start_port_bound_profiles();
+            else profile_stop(false, false, true);
+        }
     }
     refresh_status();
 }
@@ -1030,7 +1025,7 @@ void MainWindow::profile_stop(bool crash, bool block, bool manual) {
         return;
     }
     const auto idsToRefresh = running_port_bound_mode ? running_port_bound_profile_ids : QList<int>{running->id};
-    const auto stopLabel = running != nullptr ? running->outbound->DisplayTypeAndName() : tr("port-bound profiles");
+    const auto stopLabel = running != nullptr ? running->outbound->DisplayTypeAndName() : current_combined_mode_label();
 
     auto profile_stop_stage2 = [=,this] {
         if (currentUnderTest.load()) {

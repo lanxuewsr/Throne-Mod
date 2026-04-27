@@ -250,6 +250,12 @@ private:
 
     QList<std::shared_ptr<Configs::Profile>> get_port_bound_profiles(const QList<int>& profileIds = {}) const;
 
+    bool has_combined_mode_start_request(const QList<int>& profileIds = {}) const;
+
+    QList<int> build_combined_mode_profile_ids(const QList<std::shared_ptr<Configs::Profile>>& portBoundProfiles = {}) const;
+
+    QString current_combined_mode_label(const QList<std::shared_ptr<Configs::Profile>>& portBoundProfiles = {}) const;
+
     std::shared_ptr<Configs::Profile> get_tun_profile() const;
 
     std::shared_ptr<Configs::Profile> get_system_proxy_profile() const;

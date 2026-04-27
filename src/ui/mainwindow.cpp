@@ -63,6 +63,7 @@
 #include <QFileDialog>
 #include <QToolTip>
 #include <QMimeData>
+#include <QSet>
 #include <random>
 #include <3rdparty/QHotkey/qhotkey.h>
 #include <3rdparty/qv2ray/v2/proxy/QvProxyConfigurator.hpp>
@@ -1553,11 +1554,6 @@ void MainWindow::set_spmode_vpn(bool enable, bool save) {
     if (enable == Configs::dataManager->settingsRepo->spmode_vpn) return;
 
     if (enable) {
-        if (get_port_bound_profiles().isEmpty()) {
-            MessageBoxWarning(software_name, tr("Please configure at least one local port mapping first."));
-            refresh_status();
-            return;
-        }
         if (Configs::dataManager->settingsRepo->tun_profile_id < 0) {
             MessageBoxWarning(software_name, tr("Please select a Tun mode node first."));
             refresh_status();
@@ -1585,9 +1581,14 @@ void MainWindow::set_spmode_vpn(bool enable, bool save) {
     }
     refresh_status();
 
-    if (!Configs::dataManager->settingsRepo->started_port_bound_mode && !get_port_bound_profiles().isEmpty()) start_port_bound_profiles();
-    else if (Configs::dataManager->settingsRepo->started_port_bound_mode) start_port_bound_profiles();
-    else if (Configs::dataManager->settingsRepo->started_id >= 0) profile_start(Configs::dataManager->settingsRepo->started_id);
+    if (Configs::dataManager->settingsRepo->started_port_bound_mode) {
+        if (has_combined_mode_start_request()) start_port_bound_profiles();
+        else profile_stop(false, false, true);
+    } else if (has_combined_mode_start_request()) {
+        start_port_bound_profiles();
+    } else if (Configs::dataManager->settingsRepo->started_id >= 0) {
+        profile_start(Configs::dataManager->settingsRepo->started_id);
+    }
 }
 
 void MainWindow::UpdateDataView(bool force)
@@ -1856,7 +1857,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
                     ports << QString::number(profile->local_port);
                 }
             }
-            runningLabelText = tr("Port-Bound Mode");
+            runningLabelText = current_combined_mode_label();
             if (!ports.isEmpty()) {
                 runningLabelText += "\n" + ports.join(", ");
             }
@@ -1909,7 +1910,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
                 tt << running->runningCountryInfo;
             }
         } else if (running_port_bound_mode) {
-            tt << tr("Port-Bound Mode");
+            tt << current_combined_mode_label();
             QStringList boundPorts;
             for (const auto id : running_port_bound_profile_ids) {
                 auto profile = Configs::dataManager->profilesRepo->GetProfile(id);
@@ -2612,6 +2613,66 @@ QList<std::shared_ptr<Configs::Profile>> MainWindow::get_port_bound_profiles(con
         }
     }
     return profiles;
+}
+
+bool MainWindow::has_combined_mode_start_request(const QList<int>& profileIds) const {
+    if (!get_port_bound_profiles(profileIds).isEmpty()) return true;
+    if (Configs::dataManager->settingsRepo->spmode_vpn && Configs::dataManager->settingsRepo->tun_profile_id >= 0) return true;
+    if (Configs::dataManager->settingsRepo->spmode_system_proxy && Configs::dataManager->settingsRepo->system_proxy_profile_id >= 0) return true;
+    return false;
+}
+
+QList<int> MainWindow::build_combined_mode_profile_ids(const QList<std::shared_ptr<Configs::Profile>>& portBoundProfiles) const {
+    QList<int> ids;
+    QSet<int> seen;
+
+    const auto appendId = [&](int id) {
+        if (id < 0 || seen.contains(id)) return;
+        ids << id;
+        seen.insert(id);
+    };
+
+    for (const auto& profile : portBoundProfiles) {
+        if (profile != nullptr) appendId(profile->id);
+    }
+
+    if (Configs::dataManager->settingsRepo->spmode_vpn) {
+        appendId(Configs::dataManager->settingsRepo->tun_profile_id);
+    }
+    if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
+        appendId(Configs::dataManager->settingsRepo->system_proxy_profile_id);
+    }
+
+    return ids;
+}
+
+QString MainWindow::current_combined_mode_label(const QList<std::shared_ptr<Configs::Profile>>& portBoundProfiles) const {
+    QStringList parts;
+    bool hasPortMappings = false;
+
+    if (!portBoundProfiles.isEmpty()) {
+        for (const auto& profile : portBoundProfiles) {
+            if (profile != nullptr && profile->local_port > 0) {
+                hasPortMappings = true;
+                break;
+            }
+        }
+    } else {
+        for (const auto id : running_port_bound_profile_ids) {
+            auto profile = Configs::dataManager->profilesRepo->GetProfile(id);
+            if (profile != nullptr && profile->local_port > 0) {
+                hasPortMappings = true;
+                break;
+            }
+        }
+    }
+
+    if (Configs::dataManager->settingsRepo->spmode_vpn) parts << tr("Tun");
+    if (Configs::dataManager->settingsRepo->spmode_system_proxy) parts << tr("System Proxy");
+    if (hasPortMappings) parts << tr("Port Mappings");
+
+    if (parts.isEmpty()) return tr("Combined Mode");
+    return parts.join(" + ");
 }
 
 std::shared_ptr<Configs::Profile> MainWindow::get_tun_profile() const {
