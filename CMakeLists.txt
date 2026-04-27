@@ -382,9 +382,6 @@ set_target_properties(Throne PROPERTIES
         WIN32_EXECUTABLE TRUE
         UNITY_BUILD ON
 )
-if (MSVC)
-    set_property(TARGET Throne PROPERTY UNITY_BUILD OFF)
-endif()
 set_property(SOURCE "3rdparty/SQLiteCpp/src/sqlite3.c" PROPERTY SKIP_UNITY_BUILD_INCLUSION ON)
 set_property(SOURCE "src/database/SettingsRepo.cpp" PROPERTY SKIP_UNITY_BUILD_INCLUSION ON)
 
