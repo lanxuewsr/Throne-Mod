@@ -383,6 +383,7 @@ set_target_properties(Throne PROPERTIES
         UNITY_BUILD ON
 )
 set_property(SOURCE "3rdparty/SQLiteCpp/src/sqlite3.c" PROPERTY SKIP_UNITY_BUILD_INCLUSION ON)
+set_property(SOURCE "src/database/SettingsRepo.cpp" PROPERTY SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Target Source Translations
 
