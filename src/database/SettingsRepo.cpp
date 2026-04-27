@@ -7,6 +7,150 @@
 #include "include/global/Utils.hpp"
 
 namespace Configs {
+    namespace {
+        bool applyMiscSetting(SettingsRepo& repo, const QString& key, const QVariant& value) {
+            if (key == "main_window_geometry") repo.mainWindowGeometry = value.toString();
+            else if (key == "log_level") repo.log_level = value.toString();
+            else if (key == "test_url") repo.test_latency_url = value.toString();
+            else if (key == "url_test_timeout_ms") repo.url_test_timeout_ms = value.toInt();
+            else if (key == "disable_tray") repo.disable_tray = value.toBool();
+            else if (key == "test_concurrent") repo.test_concurrent = value.toInt();
+            else if (key == "disable_traffic_stats") repo.disable_traffic_stats = value.toBool();
+            else if (key == "current_group") repo.current_group = value.toInt();
+            else if (key == "mux_protocol") repo.mux_protocol = value.toString();
+            else if (key == "mux_padding") repo.mux_padding = value.toBool();
+            else if (key == "mux_concurrency") repo.mux_concurrency = value.toInt();
+            else if (key == "mux_default_on") repo.mux_default_on = value.toBool();
+            else if (key == "theme") repo.theme = value.toString();
+            else if (key == "language") repo.language = value.toInt();
+            else if (key == "font") repo.font = value.toString();
+            else if (key == "font_size") repo.font_size = value.toInt();
+            else if (key == "mw_size") repo.mw_size = value.toString();
+            else if (key == "log_enable_include") repo.log_enable_include = value.toBool();
+            else if (key == "log_enable_exclude") repo.log_enable_exclude = value.toBool();
+            else if (key == "log_include_keyword") repo.log_include_keyword = value.toStringList();
+            else if (key == "log_include_regex") repo.log_include_regex = value.toStringList();
+            else if (key == "log_exclude_keyword") repo.log_exclude_keyword = value.toStringList();
+            else if (key == "log_exclude_regex") repo.log_exclude_regex = value.toStringList();
+            else if (key == "start_minimal") repo.start_minimal = value.toBool();
+            else if (key == "max_log_line") repo.max_log_line = value.toInt();
+            else if (key == "splitter_state") repo.splitter_state = value.toString();
+            else if (key == "enable_stats") repo.enable_stats = value.toBool();
+            else if (key == "stats_tab") repo.stats_tab = value.toInt();
+            else if (key == "speed_test_mode") repo.speed_test_mode = value.toInt();
+            else if (key == "speed_test_timeout_ms") repo.speed_test_timeout_ms = value.toInt();
+            else if (key == "simple_dl_url") repo.simple_dl_url = value.toString();
+            else if (key == "allow_beta_update") repo.allow_beta_update = value.toBool();
+            else if (key == "show_system_dns") repo.show_system_dns = value.toBool();
+            else if (key == "use_custom_icons") repo.use_custom_icons = value.toBool();
+            else return false;
+            return true;
+        }
+
+        bool applyNetworkSetting(SettingsRepo& repo, const QString& key, const QVariant& value) {
+            if (key == "net_use_proxy") repo.net_use_proxy = value.toBool();
+            else if (key == "net_insecure") repo.net_insecure = value.toBool();
+            else if (key == "user_agent2") repo.user_agent = value.toString();
+            else if (key == "sub_auto_update") repo.sub_auto_update = value.toInt();
+            else if (key == "sub_clear") repo.sub_clear = value.toBool();
+            else if (key == "sub_send_hwid") repo.sub_send_hwid = value.toBool();
+            else if (key == "sub_custom_hwid_params") repo.sub_custom_hwid_params = value.toString();
+            else if (key == "skip_cert") repo.skip_cert = value.toBool();
+            else if (key == "utlsFingerprint") repo.utlsFingerprint = value.toString();
+            else if (key == "disable_win_admin") repo.disable_run_admin = value.toBool();
+            else if (key == "use_mozilla_certs") repo.use_mozilla_certs = value.toBool();
+            else if (key == "spmode2") repo.remember_spmode = value.toStringList();
+            else if (key == "remember_id") repo.remember_id = value.toInt();
+            else if (key == "remember_enable") repo.remember_enable = value.toBool();
+            else if (key == "windows_set_admin") repo.windows_set_admin = value.toBool();
+            else if (key == "shortcuts") repo.shortcuts = value.value<QMap<QString, QKeySequence>>();
+            else return false;
+            return true;
+        }
+
+        bool applyRoutingSetting(SettingsRepo& repo, const QString& key, const QVariant& value) {
+            if (key == "current_route_id") repo.current_route_id = value.toInt();
+            else if (key == "remote_dns") repo.remote_dns = value.toString();
+            else if (key == "remote_dns_strategy") repo.remote_dns_strategy = value.toString();
+            else if (key == "direct_dns") repo.direct_dns = value.toString();
+            else if (key == "direct_dns_strategy") repo.direct_dns_strategy = value.toString();
+            else if (key == "use_dns_object") repo.use_dns_object = value.toBool();
+            else if (key == "dns_object") repo.dns_object = value.toString();
+            else if (key == "dns_final_out") repo.dns_final_out = value.toString();
+            else if (key == "domain_strategy") repo.resolve_domain_strategy = value.toString();
+            else if (key == "outbound_domain_strategy") repo.default_domain_strategy = value.toString();
+            else if (key == "sniffing_mode") repo.sniffing_mode = value.toInt();
+            else if (key == "ruleset_mirror") repo.ruleset_mirror = value.toInt();
+            else if (key == "inbound_address") repo.inbound_address = value.toString();
+            else if (key == "inbound_socks_port") repo.inbound_socks_port = value.toInt();
+            else if (key == "random_inbound_port") repo.random_inbound_port = value.toBool();
+            else if (key == "custom_inbound") repo.custom_inbound = value.toString();
+            else if (key == "custom_route") repo.custom_route_global = value.toString();
+            else if (key == "active_routing") repo.active_routing = value.toString();
+            else if (key == "adblock_enable") repo.adblock_enable = value.toBool();
+            else if (key == "fakedns") repo.fake_dns = value.toBool();
+            else if (key == "enable_tun_routing") repo.enable_tun_routing = value.toBool();
+            else if (key == "proxy_scheme") repo.proxy_scheme = value.toString();
+            else if (key == "allow_stopping_active_profile") repo.allow_stopping_active_profile = value.toBool();
+            else if (key == "disable_mixed_inbound") repo.disable_mixed_inbound = value.toBool();
+            else if (key == "inbound_auth") repo.inbound_auth = value.toBool();
+            else if (key == "inbound_user") repo.inbound_user = value.toString();
+            else if (key == "inbound_pass") repo.inbound_pass = value.toString();
+            else return false;
+            return true;
+        }
+
+        bool applyPlatformSetting(SettingsRepo& repo, const QString& key, const QVariant& value) {
+            if (key == "vpn_impl") repo.vpn_implementation = value.toString();
+            else if (key == "vpn_mtu") repo.vpn_mtu = value.toInt();
+            else if (key == "vpn_ipv6") repo.vpn_ipv6 = value.toBool();
+            else if (key == "vpn_strict_route") repo.vpn_strict_route = value.toBool();
+            else if (key == "vpn_tun_ipv4_cidr") repo.vpn_tun_ipv4_cidr = value.toString();
+            else if (key == "vpn_tun_ipv6_cidr") repo.vpn_tun_ipv6_cidr = value.toString();
+            else if (key == "disable_privilege_req") repo.disable_privilege_req = value.toBool();
+            else if (key == "enable_ntp") repo.enable_ntp = value.toBool();
+            else if (key == "ntp_server_address") repo.ntp_server_address = value.toString();
+            else if (key == "ntp_server_port") repo.ntp_server_port = value.toInt();
+            else if (key == "ntp_interval") repo.ntp_interval = value.toString();
+            else if (key == "enable_dns_server") repo.enable_dns_server = value.toBool();
+            else if (key == "dns_server_listen_lan") repo.dns_server_listen_lan = value.toBool();
+            else if (key == "dns_server_listen_port") repo.dns_server_listen_port = value.toInt();
+            else if (key == "dns_v4_resp") repo.dns_v4_resp = value.toString();
+            else if (key == "dns_v6_resp") repo.dns_v6_resp = value.toString();
+            else if (key == "dns_server_rules") repo.dns_server_rules = value.toStringList();
+            else if (key == "enable_redirect") repo.enable_redirect = value.toBool();
+            else if (key == "redirect_listen_address") repo.redirect_listen_address = value.toString();
+            else if (key == "redirect_listen_port") repo.redirect_listen_port = value.toInt();
+            else if (key == "system_dns_set") repo.system_dns_set = value.toBool();
+            else if (key == "hk_mw") repo.hotkey_mainwindow = value.toString();
+            else if (key == "hk_group") repo.hotkey_group = value.toString();
+            else if (key == "hk_route") repo.hotkey_route = value.toString();
+            else if (key == "hk_spmenu") repo.hotkey_system_proxy_menu = value.toString();
+            else if (key == "hk_toggle") repo.hotkey_toggle_system_proxy = value.toString();
+            else if (key == "core_box_clash_api") repo.core_box_clash_api = value.toInt();
+            else if (key == "core_box_clash_listen_addr") repo.core_box_clash_listen_addr = value.toString();
+            else if (key == "core_box_clash_api_secret") repo.core_box_clash_api_secret = value.toString();
+            else if (key == "core_box_underlying_dns") repo.core_box_underlying_dns = value.toString();
+            else if (key == "xray_log_level") repo.xray_log_level = value.toString();
+            else if (key == "xray_mux_concurrency") repo.xray_mux_concurrency = value.toInt();
+            else if (key == "xray_mux_default_on") repo.xray_mux_default_on = value.toBool();
+            else if (key == "extra_core_paths") repo.extraCorePaths = value.toStringList();
+            else if (key == "skip_delete_confirmation") repo.skip_delete_confirmation = value.toBool();
+            else if (key == "xray_vless_preference") repo.xray_vless_preference = static_cast<Xray::XrayVlessPreference>(value.toInt());
+            else if (key == "core_dns_in_port") repo.core_dns_in_port = value.toInt();
+            else if (key == "tun_profile_id") repo.tun_profile_id = value.toInt();
+            else if (key == "system_proxy_profile_id") repo.system_proxy_profile_id = value.toInt();
+            else if (key == "enable_warp") repo.enable_warp = value.toBool();
+            else if (key == "warp_private_key") repo.warp_private_key = value.toString();
+            else if (key == "warp_public_key") repo.warp_public_key = value.toString();
+            else if (key == "warp_ifc_addrs") repo.warp_ifc_addrs = value.toStringList();
+            else if (key == "warp_ep") repo.warp_ep = value.toString();
+            else if (key == "enable_dns_routing") repo.enable_dns_routing = value.toBool();
+            else return false;
+            return true;
+        }
+    }
+
     const QSet<QString> boolKeys = {
             "disable_tray",
             "random_inbound_port",
@@ -244,130 +388,11 @@ namespace Configs {
                 QString value = QString::fromStdString(query->getColumn(1).getText());
                 
                 QVariant varValue = stringToValue(value, key);
-                
-                // Map keys to fields (matching DataStore key names)
-                if (key == "main_window_geometry") mainWindowGeometry = varValue.toString();
-                else if (key == "log_level") log_level = varValue.toString();
-                else if (key == "test_url") test_latency_url = varValue.toString();
-                else if (key == "url_test_timeout_ms") url_test_timeout_ms = varValue.toInt();
-                else if (key == "disable_tray") disable_tray = varValue.toBool();
-                else if (key == "test_concurrent") test_concurrent = varValue.toInt();
-                else if (key == "disable_traffic_stats") disable_traffic_stats = varValue.toBool();
-                else if (key == "current_group") current_group = varValue.toInt();
-                else if (key == "mux_protocol") mux_protocol = varValue.toString();
-                else if (key == "mux_padding") mux_padding = varValue.toBool();
-                else if (key == "mux_concurrency") mux_concurrency = varValue.toInt();
-                else if (key == "mux_default_on") mux_default_on = varValue.toBool();
-                else if (key == "theme") theme = varValue.toString();
-                else if (key == "language") language = varValue.toInt();
-                else if (key == "font") font = varValue.toString();
-                else if (key == "font_size") font_size = varValue.toInt();
-                else if (key == "mw_size") mw_size = varValue.toString();
-                else if (key == "log_enable_include") log_enable_include = varValue.toBool();
-                else if (key == "log_enable_exclude") log_enable_exclude = varValue.toBool();
-                else if (key == "log_include_keyword") log_include_keyword = varValue.toStringList();
-                else if (key == "log_include_regex") log_include_regex = varValue.toStringList();
-                else if (key == "log_exclude_keyword") log_exclude_keyword = varValue.toStringList();
-                else if (key == "log_exclude_regex") log_exclude_regex = varValue.toStringList();
-                else if (key == "start_minimal") start_minimal = varValue.toBool();
-                else if (key == "max_log_line") max_log_line = varValue.toInt();
-                else if (key == "splitter_state") splitter_state = varValue.toString();
-                else if (key == "enable_stats") enable_stats = varValue.toBool();
-                else if (key == "stats_tab") stats_tab = varValue.toInt();
-                else if (key == "speed_test_mode") speed_test_mode = varValue.toInt();
-                else if (key == "speed_test_timeout_ms") speed_test_timeout_ms = varValue.toInt();
-                else if (key == "simple_dl_url") simple_dl_url = varValue.toString();
-                else if (key == "allow_beta_update") allow_beta_update = varValue.toBool();
-                else if (key == "show_system_dns") show_system_dns = varValue.toBool();
-                else if (key == "use_custom_icons") use_custom_icons = varValue.toBool();
-                else if (key == "net_use_proxy") net_use_proxy = varValue.toBool();
-                else if (key == "net_insecure") net_insecure = varValue.toBool();
-                else if (key == "user_agent2") user_agent = varValue.toString();
-                else if (key == "sub_auto_update") sub_auto_update = varValue.toInt();
-                else if (key == "sub_clear") sub_clear = varValue.toBool();
-                else if (key == "sub_send_hwid") sub_send_hwid = varValue.toBool();
-                else if (key == "sub_custom_hwid_params") sub_custom_hwid_params = varValue.toString();
-                else if (key == "skip_cert") skip_cert = varValue.toBool();
-                else if (key == "utlsFingerprint") utlsFingerprint = varValue.toString();
-                else if (key == "disable_win_admin") disable_run_admin = varValue.toBool();
-                else if (key == "use_mozilla_certs") use_mozilla_certs = varValue.toBool();
-                else if (key == "spmode2") remember_spmode = varValue.toStringList();
-                else if (key == "remember_id") remember_id = varValue.toInt();
-                else if (key == "remember_enable") remember_enable = varValue.toBool();
-                else if (key == "windows_set_admin") windows_set_admin = varValue.toBool();
-                else if (key == "shortcuts") shortcuts = varValue.value<QMap<QString, QKeySequence>>();
-                else if (key == "current_route_id") current_route_id = varValue.toInt();
-                else if (key == "remote_dns") remote_dns = varValue.toString();
-                else if (key == "remote_dns_strategy") remote_dns_strategy = varValue.toString();
-                else if (key == "direct_dns") direct_dns = varValue.toString();
-                else if (key == "direct_dns_strategy") direct_dns_strategy = varValue.toString();
-                else if (key == "use_dns_object") use_dns_object = varValue.toBool();
-                else if (key == "dns_object") dns_object = varValue.toString();
-                else if (key == "dns_final_out") dns_final_out = varValue.toString();
-                else if (key == "domain_strategy") resolve_domain_strategy = varValue.toString();
-                else if (key == "outbound_domain_strategy") default_domain_strategy = varValue.toString();
-                else if (key == "sniffing_mode") sniffing_mode = varValue.toInt();
-                else if (key == "ruleset_mirror") ruleset_mirror = varValue.toInt();
-                else if (key == "inbound_address") inbound_address = varValue.toString();
-                else if (key == "inbound_socks_port") inbound_socks_port = varValue.toInt();
-                else if (key == "random_inbound_port") random_inbound_port = varValue.toBool();
-                else if (key == "custom_inbound") custom_inbound = varValue.toString();
-                else if (key == "custom_route") custom_route_global = varValue.toString();
-                else if (key == "active_routing") active_routing = varValue.toString();
-                else if (key == "adblock_enable") adblock_enable = varValue.toBool();
-                else if (key == "fakedns") fake_dns = varValue.toBool();
-                else if (key == "enable_tun_routing") enable_tun_routing = varValue.toBool();
-                else if (key == "vpn_impl") vpn_implementation = varValue.toString();
-                else if (key == "vpn_mtu") vpn_mtu = varValue.toInt();
-                else if (key == "vpn_ipv6") vpn_ipv6 = varValue.toBool();
-                else if (key == "vpn_strict_route") vpn_strict_route = varValue.toBool();
-                else if (key == "vpn_tun_ipv4_cidr") vpn_tun_ipv4_cidr = varValue.toString();
-                else if (key == "vpn_tun_ipv6_cidr") vpn_tun_ipv6_cidr = varValue.toString();
-                else if (key == "disable_privilege_req") disable_privilege_req = varValue.toBool();
-                else if (key == "enable_ntp") enable_ntp = varValue.toBool();
-                else if (key == "ntp_server_address") ntp_server_address = varValue.toString();
-                else if (key == "ntp_server_port") ntp_server_port = varValue.toInt();
-                else if (key == "ntp_interval") ntp_interval = varValue.toString();
-                else if (key == "enable_dns_server") enable_dns_server = varValue.toBool();
-                else if (key == "dns_server_listen_lan") dns_server_listen_lan = varValue.toBool();
-                else if (key == "dns_server_listen_port") dns_server_listen_port = varValue.toInt();
-                else if (key == "dns_v4_resp") dns_v4_resp = varValue.toString();
-                else if (key == "dns_v6_resp") dns_v6_resp = varValue.toString();
-                else if (key == "dns_server_rules") dns_server_rules = varValue.toStringList();
-                else if (key == "enable_redirect") enable_redirect = varValue.toBool();
-                else if (key == "redirect_listen_address") redirect_listen_address = varValue.toString();
-                else if (key == "redirect_listen_port") redirect_listen_port = varValue.toInt();
-                else if (key == "system_dns_set") system_dns_set = varValue.toBool();
-                else if (key == "proxy_scheme") proxy_scheme = varValue.toString();
-                else if (key == "hk_mw") hotkey_mainwindow = varValue.toString();
-                else if (key == "hk_group") hotkey_group = varValue.toString();
-                else if (key == "hk_route") hotkey_route = varValue.toString();
-                else if (key == "hk_spmenu") hotkey_system_proxy_menu = varValue.toString();
-                else if (key == "hk_toggle") hotkey_toggle_system_proxy = varValue.toString();
-                else if (key == "core_box_clash_api") core_box_clash_api = varValue.toInt();
-                else if (key == "core_box_clash_listen_addr") core_box_clash_listen_addr = varValue.toString();
-                else if (key == "core_box_clash_api_secret") core_box_clash_api_secret = varValue.toString();
-                else if (key == "core_box_underlying_dns") core_box_underlying_dns = varValue.toString();
-                else if (key == "xray_log_level") xray_log_level = varValue.toString();
-                else if (key == "xray_mux_concurrency") xray_mux_concurrency = varValue.toInt();
-                else if (key == "xray_mux_default_on") xray_mux_default_on = varValue.toBool();
-                else if (key == "extra_core_paths") extraCorePaths = varValue.toStringList();
-                else if (key == "skip_delete_confirmation") skip_delete_confirmation = varValue.toBool();
-                else if (key == "xray_vless_preference") xray_vless_preference = static_cast<Xray::XrayVlessPreference>(varValue.toInt());
-                else if (key == "core_dns_in_port") core_dns_in_port = varValue.toInt();
-                else if (key == "tun_profile_id") tun_profile_id = varValue.toInt();
-                else if (key == "system_proxy_profile_id") system_proxy_profile_id = varValue.toInt();
-                else if (key == "enable_warp") enable_warp = varValue.toBool();
-                else if (key == "warp_private_key") warp_private_key = varValue.toString();
-                else if (key == "warp_public_key") warp_public_key = varValue.toString();
-                else if (key == "warp_ifc_addrs") warp_ifc_addrs = varValue.toStringList();
-                else if (key == "warp_ep") warp_ep = varValue.toString();
-                else if (key == "enable_dns_routing") enable_dns_routing = varValue.toBool();
-                else if (key == "inbound_auth") inbound_auth = varValue.toBool();
-                else if (key == "inbound_user") inbound_user = varValue.toString();
-                else if (key == "inbound_pass") inbound_pass = varValue.toString();
-                else if (key == "allow_stopping_active_profile") allow_stopping_active_profile = varValue.toBool();
-                else if (key == "disable_mixed_inbound") disable_mixed_inbound = varValue.toBool();
+
+                if (applyMiscSetting(*this, key, varValue)) continue;
+                if (applyNetworkSetting(*this, key, varValue)) continue;
+                if (applyRoutingSetting(*this, key, varValue)) continue;
+                if (applyPlatformSetting(*this, key, varValue)) continue;
             }
         }
     }
