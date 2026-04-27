@@ -1366,12 +1366,18 @@ namespace Configs {
             if (profile == nullptr) continue;
             proxySelectorOutbounds << profileOutboundTags.value(profile->id);
         }
+        QString proxySelectorDefaultTag = !tunOutboundTag.isEmpty()
+                                              ? tunOutboundTag
+                                              : (!systemProxyOutboundTag.isEmpty() ? systemProxyOutboundTag : QString());
+        if (proxySelectorDefaultTag.isEmpty() && !proxySelectorOutbounds.isEmpty()) {
+            proxySelectorDefaultTag = proxySelectorOutbounds.first().toString();
+        }
         if (!proxySelectorOutbounds.isEmpty()) {
             ctx->outbounds << QJsonObject{
                 {"type", "selector"},
                 {"tag", "proxy"},
                 {"outbounds", proxySelectorOutbounds},
-                {"default", proxySelectorOutbounds.first().toString()}
+                {"default", proxySelectorDefaultTag}
             };
         }
 
@@ -1504,6 +1510,16 @@ namespace Configs {
                     {"inbound", sniffInbounds}
                 };
             }
+        }
+        QJsonArray dnsHijackInbounds;
+        if (Configs::dataManager->settingsRepo->spmode_system_proxy) dnsHijackInbounds << "mixed-in";
+        if (ctx->tunEnabled) dnsHijackInbounds << "tun-in";
+        if (!dnsHijackInbounds.isEmpty()) {
+            routeRules << QJsonObject{
+                {"action", "hijack-dns"},
+                {"protocol", "dns"},
+                {"inbound", dnsHijackInbounds}
+            };
         }
         if (!Configs::dataManager->settingsRepo->resolve_domain_strategy.isEmpty()) {
             QJsonArray resolveInbounds;

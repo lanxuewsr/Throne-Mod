@@ -71,6 +71,26 @@
 
 #include "include/sys/macos/MacOS.h"
 
+namespace {
+QString buildModeStatusHtml(QLabel *label, const QString &prefix, const QString &detail, const QString &prefixColor, const QString &detailColor) {
+    QString elidedDetail = detail;
+    if (label != nullptr && !detail.isEmpty()) {
+        const int availableWidth = qMax(label->contentsRect().width(), 240);
+        const int prefixWidth = label->fontMetrics().horizontalAdvance(prefix + " ");
+        const int detailWidth = qMax(availableWidth - prefixWidth - 12, 120);
+        elidedDetail = label->fontMetrics().elidedText(detail, Qt::ElideMiddle, detailWidth);
+    }
+
+    QString html = QString("<span style='color:%1;'>%2</span>")
+                       .arg(prefixColor, prefix.toHtmlEscaped());
+    if (!elidedDetail.isEmpty()) {
+        html += QString(" <span style='color:%1; font-weight:600;'>%2</span>")
+                    .arg(detailColor, elidedDetail.toHtmlEscaped());
+    }
+    return html;
+}
+}
+
 void UI_InitMainWindow() {
     mainwindow = new MainWindow;
 }
@@ -348,6 +368,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     labelSystemProxyProfileStatus = ui->labelSystemProxyProfileStatus;
     labelTunProfileStatus->setTextFormat(Qt::RichText);
     labelSystemProxyProfileStatus->setTextFormat(Qt::RichText);
+    labelTunProfileStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    labelSystemProxyProfileStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    labelTunProfileStatus->installEventFilter(this);
+    labelSystemProxyProfileStatus->installEventFilter(this);
     refresh_mode_profile_labels();
     ui->profilesTableView->rowsSwapped = [=,this](int row1, int row2)
     {
@@ -1041,6 +1065,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     if (!Configs::dataManager->settingsRepo->flag_tray) show();
 
     ui->data_view->setStyleSheet("background: transparent; border: none;");
+    ui->data_view->document()->setDocumentMargin(0);
+    ui->data_view->hide();
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
@@ -1566,6 +1592,7 @@ void MainWindow::UpdateDataView(bool force)
     }
     auto html = dataViewHtmlGenerator_.buildHtml();
     runOnUiThread([=, this] {
+        ui->data_view->setVisible(!html.trimmed().isEmpty());
         ui->data_view->setHtml(html);
     }, true);
     lastUpdated = QDateTime::currentDateTime();
@@ -2649,30 +2676,26 @@ void MainWindow::refresh_mode_profile_labels() {
 
     auto tunProfile = get_tun_profile();
     if (tunProfile) {
-        labelTunProfileStatus->setText(
-            QString("<span style='color:#1f9d55;'>%1 %2</span>")
-                .arg(tr("Current active node:"))
-                .arg(tunProfile->outbound->DisplayTypeAndName().toHtmlEscaped())
-        );
+        const auto fullName = tunProfile->outbound->DisplayTypeAndName();
+        labelTunProfileStatus->setText(buildModeStatusHtml(
+            labelTunProfileStatus, tr("Current active node:"), fullName, "#6b7280", "#1f9d55"));
+        labelTunProfileStatus->setToolTip(fullName);
     } else {
-        labelTunProfileStatus->setText(
-            QString("<span style='color:#d64545;'>%1</span>")
-                .arg(tr("Currently no active node"))
-        );
+        const auto text = tr("Currently no active node");
+        labelTunProfileStatus->setText(QString("<span style='color:#d64545;'>%1</span>").arg(text.toHtmlEscaped()));
+        labelTunProfileStatus->setToolTip(text);
     }
 
     auto systemProxyProfile = get_system_proxy_profile();
     if (systemProxyProfile) {
-        labelSystemProxyProfileStatus->setText(
-            QString("<span style='color:#1f9d55;'>%1 %2</span>")
-                .arg(tr("Current active node:"))
-                .arg(systemProxyProfile->outbound->DisplayTypeAndName().toHtmlEscaped())
-        );
+        const auto fullName = systemProxyProfile->outbound->DisplayTypeAndName();
+        labelSystemProxyProfileStatus->setText(buildModeStatusHtml(
+            labelSystemProxyProfileStatus, tr("Current active node:"), fullName, "#6b7280", "#1f9d55"));
+        labelSystemProxyProfileStatus->setToolTip(fullName);
     } else {
-        labelSystemProxyProfileStatus->setText(
-            QString("<span style='color:#d64545;'>%1</span>")
-                .arg(tr("Currently no active node"))
-        );
+        const auto text = tr("Currently no active node");
+        labelSystemProxyProfileStatus->setText(QString("<span style='color:#d64545;'>%1</span>").arg(text.toHtmlEscaped()));
+        labelSystemProxyProfileStatus->setToolTip(text);
     }
 }
 
@@ -3090,6 +3113,10 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
         if (obj == ui->splitter) {
             auto size = ui->splitter->size();
             ui->splitter->setSizes({size.height() / 2, size.height() / 2});
+        }
+    } else if (event->type() == QEvent::Resize) {
+        if (obj == labelTunProfileStatus || obj == labelSystemProxyProfileStatus) {
+            refresh_mode_profile_labels();
         }
     }
     return QMainWindow::eventFilter(obj, event);
