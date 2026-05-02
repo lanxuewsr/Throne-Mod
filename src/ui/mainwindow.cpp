@@ -205,12 +205,17 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     args.push_back(Int2String(Configs::dataManager->settingsRepo->core_port));
     if (Configs::dataManager->settingsRepo->log_level == "debug") args.push_back("-debug");
 
+    const bool hasCombinedModeForStartup = has_combined_mode_start_request();
+
     // Start core
     runOnThread(
         [=,this] {
             core_process = new Configs_sys::CoreProcess(core_path, args);
-            // Remember last started
-            if (Configs::dataManager->settingsRepo->remember_enable && Configs::dataManager->settingsRepo->remember_id >= 0) {
+            // Port-bound startup is now the primary public start mode. Do not let
+            // legacy single-profile remembering mask automatic multi-port startup.
+            if (Configs::dataManager->settingsRepo->remember_enable &&
+                Configs::dataManager->settingsRepo->remember_id >= 0 &&
+                !hasCombinedModeForStartup) {
                 core_process->start_profile_when_core_is_up = Configs::dataManager->settingsRepo->remember_id;
             }
             // Setup
@@ -241,7 +246,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     parallelCoreCallPool->setMaxThreadCount(10); // constant value
     //
-    connect(ui->menu_start, &QAction::triggered, this, [=,this]() { profile_start(); });
+    connect(ui->menu_start, &QAction::triggered, this, [=,this]() {
+        if (select_mode) {
+            profile_start();
+            return;
+        }
+        start_port_bound_profiles();
+    });
     connect(ui->menu_stop, &QAction::triggered, this, [=,this]() { profile_stop(false, false, true); });
     connect(ui->tabWidget->tabBar(), &QTabBar::tabMoved, this, [=,this](int from, int to) {
         // use tabData to track tab & gid
@@ -342,8 +353,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     auto *actionSetLocalPort = new QAction(tr("Set Local Port..."), this);
     auto *actionClearLocalPort = new QAction(tr("Clear Local Port Binding"), this);
     auto *actionCopyPortBoundConfig = new QAction(tr("Copy Port-Bound Config"), this);
-    auto *actionStartPortBound = new QAction(tr("Start Port-Bound Profiles"), this);
-    auto *actionStopPortBound = new QAction(tr("Stop Port-Bound Profiles"), this);
     auto *actionSetTunProfile = new QAction(tr("Set as Tun Mode Node"), this);
     auto *actionClearTunProfile = new QAction(tr("Clear Tun Mode Node"), this);
     auto *actionSetSystemProxyProfile = new QAction(tr("Set as System Proxy Node"), this);
@@ -352,21 +361,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->menu_server->insertAction(ui->menu_export_config, actionCopyPortBoundConfig);
     ui->menu_server->insertAction(actionCopyPortBoundConfig, actionClearLocalPort);
     ui->menu_server->insertAction(actionClearLocalPort, actionSetLocalPort);
-    ui->menu_server->insertAction(actionSetLocalPort, actionStopPortBound);
-    ui->menu_server->insertAction(actionStopPortBound, actionStartPortBound);
-    ui->menu_server->insertAction(actionStartPortBound, actionClearSystemProxyProfile);
+    ui->menu_server->insertAction(actionSetLocalPort, actionClearSystemProxyProfile);
     ui->menu_server->insertAction(actionClearSystemProxyProfile, actionSetSystemProxyProfile);
     ui->menu_server->insertAction(actionSetSystemProxyProfile, actionClearTunProfile);
     ui->menu_server->insertAction(actionClearTunProfile, actionSetTunProfile);
     connect(actionSetLocalPort, &QAction::triggered, this, [=, this]() { prompt_set_local_port_binding(); });
     connect(actionClearLocalPort, &QAction::triggered, this, [=, this]() { clear_local_port_binding(); });
     connect(actionCopyPortBoundConfig, &QAction::triggered, this, [=, this]() { copy_port_bound_config(); });
-    connect(actionStartPortBound, &QAction::triggered, this, [=, this]() {
-        auto selected = get_now_selected_list();
-        if (!selected.isEmpty()) start_port_bound_profiles(selected);
-        else start_port_bound_profiles();
-    });
-    connect(actionStopPortBound, &QAction::triggered, this, [=, this]() { profile_stop(false, false, true); });
     connect(actionSetTunProfile, &QAction::triggered, this, [=, this]() { assign_tun_profile_from_selection(); });
     connect(actionClearTunProfile, &QAction::triggered, this, [=, this]() { clear_tun_profile(); });
     connect(actionSetSystemProxyProfile, &QAction::triggered, this, [=, this]() { assign_system_proxy_profile_from_selection(); });
@@ -609,68 +610,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     trayMenu->addAction(ui->actionRemember_last_proxy);
     trayMenu->addAction(ui->actionAllow_LAN);
     trayMenu->addSeparator();
-    // Select Server submenu (dynamically populated with pagination)
-    constexpr int PAGE_SIZE = 15;
-    trayServerMenu = new QMenu(tr("Select Server"));
-    trayMenu->addMenu(trayServerMenu);
-    connect(trayServerMenu, &QMenu::aboutToShow, this, [=, this]() {
-        trayServerMenu->clear();
-        // Stop action if a profile is running
-        if (running || running_port_bound_mode) {
-            const auto stopText = running
-                ? tr("Stop: %1").arg(running->name)
-                : tr("Stop Port-Bound Profiles");
-            auto *stopAction = trayServerMenu->addAction(stopText);
-            connect(stopAction, &QAction::triggered, this, [=, this]() { profile_stop(false, false, true); });
-            trayServerMenu->addSeparator();
-        }
-        // Build flat list of profiles, starting from the group of the running profile or currentGroup
-        int startGroupId = Configs::dataManager->settingsRepo->current_group;
-        if (running) startGroupId = running->gid;
-        auto groupIds = Configs::dataManager->groupsRepo->GetGroupsTabOrder();
-        // Reorder groupIds so startGroupId comes first
-        int startIdx = groupIds.indexOf(startGroupId);
-        if (startIdx > 0) {
-            QList<int> reordered = groupIds.mid(startIdx) + groupIds.mid(0, startIdx);
-            groupIds = reordered;
-        }
-        QList<int> allProfileIDs;
-        for (auto gid : groupIds) {
-            auto group = Configs::dataManager->groupsRepo->GetGroup(gid);
-            allProfileIDs.append(group->Profiles());
-        }
-        int totalProfiles = allProfileIDs.size();
-        // Clamp page
-        int maxPage = qMax(0, (totalProfiles - 1) / PAGE_SIZE);
-        trayServerPage = qBound(0, trayServerPage, maxPage);
-        int offset = trayServerPage * PAGE_SIZE;
-        int end = qMin(offset + PAGE_SIZE, totalProfiles);
-        // Show ↑ if not on first page
-        if (trayServerPage > 0) {
-            auto *upAction = trayServerMenu->addAction(QStringLiteral("\u2191"));
-            connect(upAction, &QAction::triggered, this, [=, this]() {
-                trayServerPage--;
-                trayServerMenu->popup(trayServerMenu->pos());
-            });
-        }
-        // Show profiles for current page
-        auto neededProfilesIDNames = Configs::dataManager->profilesRepo->GetProfileIDNameMappedBatch(allProfileIDs.sliced(offset, end - offset));
-        for (const auto&[id, name] : neededProfilesIDNames) {
-            auto *action = trayServerMenu->addAction(name);
-            action->setCheckable(true);
-            action->setChecked(running && running->id == id);
-            connect(action, &QAction::triggered, this, [=, this]() { profile_start(id); });
-        }
-        // Show ↓ if not on last page
-        if (trayServerPage < maxPage) {
-            auto *downAction = trayServerMenu->addAction(QStringLiteral("\u2193"));
-            connect(downAction, &QAction::triggered, this, [=, this]() {
-                trayServerPage++;
-                trayServerMenu->popup(trayServerMenu->pos());
-            });
-        }
-    });
-    trayMenu->addSeparator();
     // MacOS cannot reuse menus across different parents properly
     if (getOS() == Darwin) {
         auto* traySpmodeMenu = new QMenu(ui->menu_spmode->title(), trayMenu);
@@ -692,9 +631,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     trayMenu->addAction(ui->menu_exit);
     tray->setVisible(!Configs::dataManager->settingsRepo->disable_tray);
     tray->setContextMenu(trayMenu);
-    connect(trayMenu, &QMenu::aboutToShow, this, [=,this]() {
-       trayServerPage = 0;
-    });
     connect(tray, &QSystemTrayIcon::activated, qApp, [=, this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger && getOS() != Darwin) {
             ActivateWindow(this);
@@ -782,8 +718,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         actionSetLocalPort->setEnabled(selected.count() == 1);
         actionClearLocalPort->setEnabled(!selected.empty());
         actionCopyPortBoundConfig->setEnabled(!get_port_bound_profiles().isEmpty());
-        actionStartPortBound->setEnabled(!get_port_bound_profiles().isEmpty() && !running_port_bound_mode);
-        actionStopPortBound->setEnabled(running_port_bound_mode);
         actionSetTunProfile->setEnabled(selected.count() == 1);
         actionSetSystemProxyProfile->setEnabled(selected.count() == 1);
         actionClearTunProfile->setEnabled(Configs::dataManager->settingsRepo->tun_profile_id >= 0);
@@ -1324,7 +1258,7 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
             if (auto id = info.split(",")[1].toInt(); id >= 0)
             {
                 profile_start(id);
-            } else if (!Configs::dataManager->settingsRepo->started_port_bound_mode && !get_port_bound_profiles().isEmpty()) {
+            } else if (!Configs::dataManager->settingsRepo->started_port_bound_mode && has_combined_mode_start_request()) {
                 start_port_bound_profiles();
             }
             if (Configs::dataManager->settingsRepo->system_dns_set) {
@@ -2971,7 +2905,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
             // take over by shortcut_esc
             break;
         case Qt::Key_Enter:
-            profile_start();
+            if (select_mode) {
+                profile_start();
+                break;
+            }
+            start_port_bound_profiles();
             break;
         default:
             QMainWindow::keyPressEvent(event);

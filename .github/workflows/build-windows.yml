@@ -64,6 +64,7 @@ jobs:
       DEST: ${{ github.workspace }}/deployment/windows-amd64
       DEST_SUFFIX: windows-amd64
       ARCH: x64
+      INPUT_VERSION: ${{ github.event.inputs.tag }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
