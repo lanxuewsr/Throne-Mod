@@ -62,6 +62,8 @@ public:
 
     void refresh_groups();
 
+    bool is_all_groups_view() const;
+
     void refresh_status(const QString &traffic_update = "");
 
     void update_traffic_graph(int proxyDl, int proxyUp, int directDl, int directUp);
@@ -241,6 +243,10 @@ private:
     void updateLogFilterFields();
 
     QList<int> filterProfilesList(const QList<int>& profileIDs);
+
+    QList<int> get_all_profile_ids_in_group_order() const;
+
+    QList<int> get_visible_group_profile_ids() const;
 
     QList<int> get_now_selected_list();
 

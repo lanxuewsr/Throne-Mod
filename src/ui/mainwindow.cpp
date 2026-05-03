@@ -73,6 +73,8 @@
 #include "include/sys/macos/MacOS.h"
 
 namespace {
+constexpr int ALL_GROUP_TAB_ID = -10001;
+
 QString buildModeStatusHtml(QLabel *label, const QString &prefix, const QString &detail, const QString &prefixColor, const QString &detailColor) {
     QString elidedDetail = detail;
     if (label != nullptr && !detail.isEmpty()) {
@@ -255,10 +257,25 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     });
     connect(ui->menu_stop, &QAction::triggered, this, [=,this]() { profile_stop(false, false, true); });
     connect(ui->tabWidget->tabBar(), &QTabBar::tabMoved, this, [=,this](int from, int to) {
+        if (!Configs::dataManager->settingsRepo->refreshing_group_list &&
+            ui->tabWidget->tabBar()->tabData(0).toInt() != ALL_GROUP_TAB_ID) {
+            int allTabIndex = -1;
+            for (int i = 0; i < ui->tabWidget->tabBar()->count(); i++) {
+                if (ui->tabWidget->tabBar()->tabData(i).toInt() == ALL_GROUP_TAB_ID) {
+                    allTabIndex = i;
+                    break;
+                }
+            }
+            Configs::dataManager->settingsRepo->refreshing_group_list = true;
+            if (allTabIndex >= 0) ui->tabWidget->tabBar()->moveTab(allTabIndex, 0);
+            Configs::dataManager->settingsRepo->refreshing_group_list = false;
+            return;
+        }
         // use tabData to track tab & gid
         QList<int> tabOrder;
         for (int i = 0; i < ui->tabWidget->tabBar()->count(); i++) {
-            tabOrder += ui->tabWidget->tabBar()->tabData(i).toInt();
+            const int gid = ui->tabWidget->tabBar()->tabData(i).toInt();
+            if (gid != ALL_GROUP_TAB_ID) tabOrder += gid;
         }
         Configs::dataManager->groupsRepo->SetGroupsTabOrder(tabOrder);
         on_tabWidget_currentChanged(ui->tabWidget->tabBar()->currentIndex());
@@ -384,14 +401,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     refresh_mode_profile_labels();
     ui->profilesTableView->rowsSwapped = [=,this](int row1, int row2)
     {
+        if (is_all_groups_view()) {
+            refresh_proxy_list({}, true);
+            return;
+        }
         if (!addressFilterString.isEmpty() || !nameFilterString.isEmpty() || !typeFilterString.isEmpty() || !countryFilterString.isEmpty()) return;
         if (row1 == row2) return;
         auto group = Configs::dataManager->groupsRepo->CurrentGroup();
+        if (group == nullptr) return;
         group->EmplaceProfile(row1, row2);
         profilesTableModel->emplaceProfiles(row1, row2);
         Configs::dataManager->groupsRepo->Save(group);
     };
     connect(ui->profilesTableView->horizontalHeader(), &QHeaderView::sectionClicked, this, [=, this](int logicalIndex) {
+        if (is_all_groups_view()) {
+            MessageBoxInfo(software_name, tr("Switch to a specific group before sorting profiles."));
+            return;
+        }
         GroupSortAction action;
         if (proxy_last_order == logicalIndex) {
             action.descending = true;
@@ -430,6 +456,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         });
     });
     connect(ui->profilesTableView->horizontalHeader(), &QHeaderView::sectionResized, this, [=, this](int, int, int) {
+        if (is_all_groups_view()) return;
         auto group = Configs::dataManager->groupsRepo->CurrentGroup();
         if (Configs::dataManager->settingsRepo->refreshing_group || group == nullptr) return;
         group->column_width.clear();
@@ -442,6 +469,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(ui->profilesTableView->horizontalHeader(), &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
         auto* header = ui->profilesTableView->horizontalHeader();
         int columnIndex = header->logicalIndexAt(pos);
+        if (is_all_groups_view()) {
+            return;
+        }
         auto group = Configs::dataManager->groupsRepo->CurrentGroup();
         if (group == nullptr) return;
         if (columnIndex == 3) {
@@ -751,7 +781,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     runOnNewThread(getRemoteRouteProfiles);
 
     connect(ui->actionRefresh_Column_Widths, &QAction::triggered, this, [=, this] {
+        if (is_all_groups_view()) {
+            refresh_proxy_list_column_size();
+            return;
+        }
         auto ent = Configs::dataManager->groupsRepo->CurrentGroup();
+        if (ent == nullptr) return;
         ent->column_width.clear();
         Configs::dataManager->groupsRepo->Save(ent);
         show_group(ent->id);
@@ -863,7 +898,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         urltest_current_group(get_now_selected_list());
     });
     connect(ui->actionUrl_Test_Group, &QAction::triggered, this, [=,this]() {
-        urltest_current_group(Configs::dataManager->groupsRepo->CurrentGroup()->Profiles());
+        urltest_current_group(get_visible_group_profile_ids());
     });
     connect(ui->actionSpeedtest_Current, &QAction::triggered, this, [=,this]()
     {
@@ -878,13 +913,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     });
     connect(ui->actionSpeedtest_Group, &QAction::triggered, this, [=,this]()
     {
-        speedtest_current_group(Configs::dataManager->groupsRepo->CurrentGroup()->Profiles());
+        speedtest_current_group(get_visible_group_profile_ids());
     });
     connect(ui->actionResolve_Selected_Out_IP, &QAction::triggered, this, [=,this]() {
         iptest_current_group(get_now_selected_list());
     });
     connect(ui->actionResolve_Out_IP, &QAction::triggered, this, [=,this]() {
-        iptest_current_group(Configs::dataManager->groupsRepo->CurrentGroup()->Profiles());
+        iptest_current_group(get_visible_group_profile_ids());
     });
     connect(ui->menu_stop_testing, &QAction::triggered, this, [=,this]() { stopTests(); });
     //
@@ -1075,23 +1110,60 @@ MainWindow::~MainWindow() {
 // Group tab manage
 
 inline int tabIndex2GroupId(int index) {
+    if (index < 0) return -1;
+    auto tabWidget = mainwindow == nullptr ? nullptr : mainwindow->findChild<QTabWidget*>("tabWidget");
+    if (tabWidget != nullptr && index < tabWidget->count()) {
+        const auto data = tabWidget->tabBar()->tabData(index);
+        if (data.isValid()) return data.toInt();
+    }
     auto tabOrder = Configs::dataManager->groupsRepo->GetGroupsTabOrder();
-    if (tabOrder.length() <= index) return -1;
-    return tabOrder[index];
+    if (tabOrder.length() <= index - 1) return -1;
+    if (index == 0) return ALL_GROUP_TAB_ID;
+    return tabOrder[index - 1];
 }
 
 inline int groupId2TabIndex(int gid) {
+    if (gid == ALL_GROUP_TAB_ID) return 0;
     auto tabOrder = Configs::dataManager->groupsRepo->GetGroupsTabOrder();
     for (int key = 0; key < tabOrder.count(); key++) {
-        if (tabOrder[key] == gid) return key;
+        if (tabOrder[key] == gid) return key + 1;
     }
-    return 0;
+    return tabOrder.isEmpty() ? 0 : 1;
+}
+
+bool MainWindow::is_all_groups_view() const {
+    return ui->tabWidget->currentIndex() >= 0 &&
+           ui->tabWidget->tabBar()->tabData(ui->tabWidget->currentIndex()).toInt() == ALL_GROUP_TAB_ID;
+}
+
+QList<int> MainWindow::get_all_profile_ids_in_group_order() const {
+    QList<int> profileIDs;
+    QSet<int> seen;
+    for (const auto gid : Configs::dataManager->groupsRepo->GetGroupsTabOrder()) {
+        auto group = Configs::dataManager->groupsRepo->GetGroup(gid);
+        if (group == nullptr) continue;
+        for (const auto profileID : group->Profiles()) {
+            if (seen.contains(profileID)) continue;
+            profileIDs << profileID;
+            seen.insert(profileID);
+        }
+    }
+    return profileIDs;
+}
+
+QList<int> MainWindow::get_visible_group_profile_ids() const {
+    if (is_all_groups_view()) return get_all_profile_ids_in_group_order();
+    auto group = Configs::dataManager->groupsRepo->CurrentGroup();
+    return group == nullptr ? QList<int>{} : group->Profiles();
 }
 
 void MainWindow::on_tabWidget_currentChanged(int index) {
     if (Configs::dataManager->settingsRepo->refreshing_group_list) return;
     auto gid = tabIndex2GroupId(index);
-    if (gid == Configs::dataManager->settingsRepo->current_group) return;
+    if (gid == ALL_GROUP_TAB_ID) {
+        show_group(gid);
+        return;
+    }
     show_group(gid);
 }
 
@@ -1099,8 +1171,18 @@ void MainWindow::show_group(int gid) {
     if (Configs::dataManager->settingsRepo->refreshing_group) return;
     Configs::dataManager->settingsRepo->refreshing_group = true;
 
-    auto group = Configs::dataManager->groupsRepo->GetGroup(gid);
+    const bool showAllGroups = gid == ALL_GROUP_TAB_ID;
+    auto group = showAllGroups ? nullptr : Configs::dataManager->groupsRepo->GetGroup(gid);
     if (group == nullptr) {
+        if (showAllGroups) {
+            ui->tabWidget->widget(groupId2TabIndex(gid))->layout()->addWidget(ui->profilesTableView);
+            refresh_proxy_list({}, true);
+            QTimer::singleShot(0, ui->profilesTableView, [=, this]() {
+                refresh_proxy_list_column_size();
+            });
+            Configs::dataManager->settingsRepo->refreshing_group = false;
+            return;
+        }
         MessageBoxWarning(tr("Error"), QString("No such group: %1").arg(gid));
         Configs::dataManager->settingsRepo->refreshing_group = false;
         return;
@@ -1910,28 +1992,30 @@ void MainWindow::refresh_groups() {
         ui->tabWidget->removeTab(i);
     }
 
-    int index = 0;
+    ui->tabWidget->setTabText(0, tr("All"));
+    ui->tabWidget->tabBar()->setTabData(0, ALL_GROUP_TAB_ID);
+
+    int index = 1;
     for (const auto &gid: Configs::dataManager->groupsRepo->GetGroupsTabOrder()) {
         auto group = Configs::dataManager->groupsRepo->GetGroup(gid);
-        if (index == 0) {
-            ui->tabWidget->setTabText(0, group->name);
-        } else {
-            auto widget2 = new QWidget();
-            auto layout2 = new QVBoxLayout();
-            layout2->setContentsMargins(QMargins());
-            layout2->setSpacing(0);
-            widget2->setLayout(layout2);
-            ui->tabWidget->addTab(widget2, group->name);
-        }
+        if (group == nullptr) continue;
+        auto widget2 = new QWidget();
+        auto layout2 = new QVBoxLayout();
+        layout2->setContentsMargins(QMargins());
+        layout2->setSpacing(0);
+        widget2->setLayout(layout2);
+        ui->tabWidget->addTab(widget2, group->name);
         ui->tabWidget->tabBar()->setTabData(index, gid);
         index++;
     }
 
     // show after group changed
+    auto groupOrder = Configs::dataManager->groupsRepo->GetGroupsTabOrder();
     if (Configs::dataManager->groupsRepo->CurrentGroup() == nullptr) {
         Configs::dataManager->settingsRepo->current_group = -1;
-        ui->tabWidget->setCurrentIndex(groupId2TabIndex(0));
-        show_group(Configs::dataManager->groupsRepo->GetGroupsTabOrder().count() > 0 ? Configs::dataManager->groupsRepo->GetGroupsTabOrder().first() : 0);
+        const int firstGroupId = groupOrder.isEmpty() ? ALL_GROUP_TAB_ID : groupOrder.first();
+        ui->tabWidget->setCurrentIndex(groupId2TabIndex(firstGroupId));
+        show_group(firstGroupId);
     } else {
         ui->tabWidget->setCurrentIndex(groupId2TabIndex(Configs::dataManager->settingsRepo->current_group));
         show_group(Configs::dataManager->settingsRepo->current_group);
@@ -1941,6 +2025,20 @@ void MainWindow::refresh_groups() {
 }
 
 void MainWindow::refresh_proxy_list_column_size() {
+    if (is_all_groups_view()) {
+        auto *hHeader = dynamic_cast<ProfilesTableFilterHeader*>(ui->profilesTableView->horizontalHeader());
+        if (hHeader == nullptr) return;
+        QTimer::singleShot(0, ui->profilesTableView, [=, this]() {
+            hHeader->blockSignals(true);
+            for (int i = 0; i <= 5; i++) {
+                hHeader->setSectionResizeMode(i, QHeaderView::ResizeToContents);
+            }
+            ui->profilesTableView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+            hHeader->adjustPositions();
+            hHeader->blockSignals(false);
+        });
+        return;
+    }
     auto group = Configs::dataManager->groupsRepo->CurrentGroup();
     if (!group) return;
     if (!group->column_width.isEmpty() && group->column_width.size() < 6) {
@@ -2001,8 +2099,7 @@ void MainWindow::refresh_proxy_list(const QList<int>& ids, bool mayNeedReset) {
 }
 
 void MainWindow::refresh_proxy_list_impl(const QList<int>& ids, bool mayNeedReset) {
-    auto currentGroup = Configs::dataManager->groupsRepo->CurrentGroup();
-    if (currentGroup == nullptr)
+    if (!is_all_groups_view() && Configs::dataManager->groupsRepo->CurrentGroup() == nullptr)
     {
         MW_show_log("Could not find current group!");
         return;
@@ -2014,14 +2111,12 @@ void MainWindow::refresh_proxy_list_impl(const QList<int>& ids, bool mayNeedRese
 }
 
 void MainWindow::refresh_proxy_list_impl_refresh_data(const QList<int>& ids, bool mayNeedReset) {
-    auto currentGroup = Configs::dataManager->groupsRepo->CurrentGroup();
-    if (currentGroup == nullptr) return;
     if (!ids.isEmpty()) {
         if (filterProfilesList(ids).isEmpty())
             return;
         for (auto id:ids) profilesTableModel->refreshProfileId(id);
     } else {
-        auto profileIDs = filterProfilesList(currentGroup->profiles);
+        auto profileIDs = filterProfilesList(get_visible_group_profile_ids());
         profilesTableModel->refreshTable(profileIDs, mayNeedReset);
     }
 }
@@ -2068,6 +2163,10 @@ void MainWindow::on_menu_clone_triggered() {
 }
 
 void  MainWindow::on_menu_delete_repeat_triggered () {
+    if (is_all_groups_view()) {
+        MessageBoxInfo(software_name, tr("Switch to a specific group before removing duplicate profiles."));
+        return;
+    }
     QList<std::shared_ptr<Configs::Profile>> out;
     QList<std::shared_ptr<Configs::Profile>> out_del;
 
@@ -2396,7 +2495,9 @@ void MainWindow::on_menu_select_all_triggered() {
 bool mw_sub_updating = false;
 
 void MainWindow::on_menu_update_subscription_triggered() {
+    if (is_all_groups_view()) return;
     auto group = Configs::dataManager->groupsRepo->CurrentGroup();
+    if (group == nullptr) return;
     if (group->url.isEmpty()) return;
     if (mw_sub_updating) return;
     mw_sub_updating = true;
@@ -2408,18 +2509,18 @@ void MainWindow::on_menu_remove_unavailable_triggered() {
 }
 
 void MainWindow::on_menu_remove_invalid_triggered() {
+    auto profileIDsToCheck = get_visible_group_profile_ids();
+    if (profileIDsToCheck.isEmpty()) return;
     runOnNewThread([=,this]
     {
         QList<std::shared_ptr<Configs::Profile>> out_del;
 
-     auto currentGroup = Configs::dataManager->groupsRepo->CurrentGroup();
-     if (currentGroup == nullptr) return;
      std::atomic counter(0);
      QMutex mu;
      QMutex access;
-     int profileSize = currentGroup->Profiles().size();
+     int profileSize = profileIDsToCheck.size();
      mu.lock();
-     for (const auto& profileID : currentGroup->Profiles()) {
+     for (const auto& profileID : profileIDsToCheck) {
          auto profile = Configs::dataManager->profilesRepo->GetProfile(profileID);
          parallelCoreCallPool->start([&out_del, profile, &counter, &mu, profileSize, &access]
          {
@@ -2528,9 +2629,9 @@ QList<int> MainWindow::get_selected_or_group() {
     QList<int> profileIDs;
     if (selected_or_group > 0) {
         profileIDs = get_now_selected_list();
-        if (profileIDs.isEmpty() && selected_or_group == 2) profileIDs = Configs::dataManager->groupsRepo->CurrentGroup()->Profiles();
+        if (profileIDs.isEmpty() && selected_or_group == 2) profileIDs = get_visible_group_profile_ids();
     } else {
-        profileIDs = Configs::dataManager->groupsRepo->CurrentGroup()->Profiles();
+        profileIDs = get_visible_group_profile_ids();
     }
     return profileIDs;
 }
@@ -2869,9 +2970,9 @@ void MainWindow::clearUnavailableProfiles(bool confirm, QList<int> profileIDs) {
     QString remove_display;
 
     auto group = Configs::dataManager->groupsRepo->CurrentGroup();
-    if (!group) return;
+    if (!group && profileIDs.isEmpty()) return;
 
-    if (profileIDs.isEmpty()) profileIDs = group->Profiles();
+    if (profileIDs.isEmpty()) profileIDs = get_visible_group_profile_ids();
 
     auto profiles = Configs::dataManager->profilesRepo->GetProfileBatch(profileIDs);
     for (const auto &profile: profiles) {
@@ -3036,6 +3137,8 @@ void MainWindow::on_tabWidget_customContextMenuRequested(const QPoint &p) {
 
     ui->tabWidget->setCurrentIndex(clickedIndex);
     auto* menu = new QMenu(this);
+    const int clickedGroupId = tabIndex2GroupId(clickedIndex);
+    const bool clickedAllGroups = clickedGroupId == ALL_GROUP_TAB_ID;
 
     auto* addAction = new QAction(tr("Add new Group"), this);
     auto* deleteAction = new QAction(tr("Delete selected Group"), this);
@@ -3052,7 +3155,8 @@ void MainWindow::on_tabWidget_customContextMenuRequested(const QPoint &p) {
         }
     });
     connect(deleteAction, &QAction::triggered, this, [=,this] {
-        auto id = Configs::dataManager->groupsRepo->GetGroupsTabOrder()[clickedIndex];
+        auto id = clickedGroupId;
+        if (id == ALL_GROUP_TAB_ID) return;
         if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(Configs::dataManager->groupsRepo->GetGroup(id)->name)) ==
             QMessageBox::StandardButton::Yes) {
             if (running != nullptr) {
@@ -3073,7 +3177,8 @@ void MainWindow::on_tabWidget_customContextMenuRequested(const QPoint &p) {
         }
     });
     connect(editAction, &QAction::triggered, this, [=,this]{
-        auto id = Configs::dataManager->groupsRepo->GetGroupsTabOrder()[clickedIndex];
+        auto id = clickedGroupId;
+        if (id == ALL_GROUP_TAB_ID) return;
         auto ent = Configs::dataManager->groupsRepo->GetGroup(id);
         auto dialog = new DialogEditGroup(ent, this);
         connect(dialog, &QDialog::finished, this, [=,this] {
@@ -3087,20 +3192,21 @@ void MainWindow::on_tabWidget_customContextMenuRequested(const QPoint &p) {
     });
     menu->addAction(ui->actionRefresh_Column_Widths);
     menu->addAction(addAction);
-    menu->addAction(editAction);
-    auto group = Configs::dataManager->groupsRepo->GetGroup(Configs::dataManager->settingsRepo->current_group);
-    if (Configs::dataManager->groupsRepo->GetAllGroupIds().size() > 1) menu->addAction(deleteAction);
-    if (!group->Profiles().empty()) {
+    if (!clickedAllGroups) menu->addAction(editAction);
+    auto group = clickedAllGroups ? nullptr : Configs::dataManager->groupsRepo->GetGroup(clickedGroupId);
+    if (!clickedAllGroups && Configs::dataManager->groupsRepo->GetAllGroupIds().size() > 1) menu->addAction(deleteAction);
+    const auto visibleProfiles = get_visible_group_profile_ids();
+    if (!visibleProfiles.empty()) {
         menu->addAction(ui->actionUrl_Test_Group);
         menu->addAction(ui->actionSpeedtest_Group);
         menu->addAction(ui->actionResolve_Out_IP);
         menu->addAction(ui->menu_resolve_domain);
         menu->addAction(ui->menu_clear_test_result);
-        menu->addAction(ui->menu_delete_repeat);
+        if (!clickedAllGroups) menu->addAction(ui->menu_delete_repeat);
         menu->addAction(ui->menu_remove_unavailable);
         menu->addAction(ui->menu_remove_invalid);
     }
-    if (!group->url.isEmpty()) menu->addAction(ui->menu_update_subscription);
+    if (group != nullptr && !group->url.isEmpty()) menu->addAction(ui->menu_update_subscription);
     if (!speedtestRunning.tryLock()) {
         menu->addAction(ui->menu_stop_testing);
     } else {
