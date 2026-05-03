@@ -48,6 +48,7 @@ namespace Configs
             case GroupSortMethod::ByTestResult:
             case GroupSortMethod::ByTraffic:
             case GroupSortMethod::ByLocalPort:
+            case GroupSortMethod::ByAuthentication:
             case GroupSortMethod::ByType: {
                 auto get_latency_for_sort = [](const std::shared_ptr<Profile>& prof) {
                     auto i = prof->latency;
@@ -97,6 +98,8 @@ namespace Configs
                                           }
                                       } else if (sortAction.method == GroupSortMethod::ByLocalPort) {
                                           return sortAction.descending ? profA->local_port > profB->local_port : profA->local_port < profB->local_port;
+                                      } else if (sortAction.method == GroupSortMethod::ByAuthentication) {
+                                          return sortAction.descending ? profA->local_auth_enabled > profB->local_auth_enabled : profA->local_auth_enabled < profB->local_auth_enabled;
                                       }
                                       return sortAction.descending ? ms_a > ms_b : ms_a < ms_b;
                                   });

@@ -19,7 +19,7 @@ int ProfilesTableModel::rowCount(const QModelIndex &parent) const {
 
 int ProfilesTableModel::columnCount(const QModelIndex &parent) const {
     if (parent.isValid()) return 0;
-    return 6;
+    return 7;
 }
 
 Qt::ItemFlags ProfilesTableModel::flags(const QModelIndex &index) const {
@@ -81,7 +81,7 @@ void ProfilesTableModel::evictOne() const {
 
 QVariant ProfilesTableModel::data(const QModelIndex &index, int role) const {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_profileIds.size()
-        || index.column() < 0 || index.column() >= 6) {
+        || index.column() < 0 || index.column() >= columnCount()) {
         return {};
     }
     const int profileId = m_profileIds[index.row()];
@@ -107,6 +107,7 @@ QVariant ProfilesTableModel::data(const QModelIndex &index, int role) const {
         case 3: return profile->DisplayTestResult();
         case 4: return profile->DisplayTraffic();
         case 5: return profile->local_port > 0 ? QString::number(profile->local_port) : QString();
+        case 6: return profile->local_auth_enabled ? QStringLiteral("开启") : QString();
         default: return {};
         }
     }
@@ -131,6 +132,7 @@ QVariant ProfilesTableModel::headerData(int section, Qt::Orientation orientation
         case 3: return tr("Test Result");
         case 4: return tr("Traffic");
         case 5: return tr("Local Port");
+        case 6: return tr("Authentication");
         default: return {};
         }
     }

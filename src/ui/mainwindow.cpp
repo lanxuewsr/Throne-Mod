@@ -2,6 +2,16 @@
 
 #include <QAbstractItemView>
 #include <QMenu>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QHeaderView>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QVBoxLayout>
+#include <QUuid>
 #include <ranges>
 
 #include "include/configs/sub/GroupUpdater.hpp"
@@ -39,7 +49,6 @@
 #include "include/sys/linux/LinuxCap.h"
 #include <QDBusInterface>
 #include <QDBusReply>
-#include <QUuid>
 #endif
 #include <unistd.h>
 #endif
@@ -370,10 +379,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     auto *actionSetLocalPort = new QAction(tr("Set Local Port..."), this);
     auto *actionClearLocalPort = new QAction(tr("Clear Local Port Binding"), this);
     auto *actionCopyPortBoundConfig = new QAction(tr("Copy Port-Bound Config"), this);
+    auto *actionManageLocalAuth = new QAction(tr("身份认证管理"), this);
+    auto *actionToggleLocalAuth = new QAction(tr("开启/关闭身份验证"), this);
+    auto *actionPreferencesLocalAuth = new QAction(tr("身份验证管理"), this);
     auto *actionSetTunProfile = new QAction(tr("Set as Tun Mode Node"), this);
     auto *actionClearTunProfile = new QAction(tr("Clear Tun Mode Node"), this);
     auto *actionSetSystemProxyProfile = new QAction(tr("Set as System Proxy Node"), this);
     auto *actionClearSystemProxyProfile = new QAction(tr("Clear System Proxy Node"), this);
+    ui->menu_preferences->insertAction(ui->menu_routing_settings, actionPreferencesLocalAuth);
     ui->menu_server->insertSeparator(ui->menu_export_config);
     ui->menu_server->insertAction(ui->menu_export_config, actionCopyPortBoundConfig);
     ui->menu_server->insertAction(actionCopyPortBoundConfig, actionClearLocalPort);
@@ -382,9 +395,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->menu_server->insertAction(actionClearSystemProxyProfile, actionSetSystemProxyProfile);
     ui->menu_server->insertAction(actionSetSystemProxyProfile, actionClearTunProfile);
     ui->menu_server->insertAction(actionClearTunProfile, actionSetTunProfile);
+    ui->menu_server->insertAction(actionCopyPortBoundConfig, actionToggleLocalAuth);
+    ui->menu_server->insertAction(actionToggleLocalAuth, actionManageLocalAuth);
     connect(actionSetLocalPort, &QAction::triggered, this, [=, this]() { prompt_set_local_port_binding(); });
     connect(actionClearLocalPort, &QAction::triggered, this, [=, this]() { clear_local_port_binding(); });
     connect(actionCopyPortBoundConfig, &QAction::triggered, this, [=, this]() { copy_port_bound_config(); });
+    connect(actionManageLocalAuth, &QAction::triggered, this, [=, this]() { show_local_auth_management(get_now_selected_list()); });
+    connect(actionToggleLocalAuth, &QAction::triggered, this, [=, this]() { toggle_local_auth_for_selection(); });
+    connect(actionPreferencesLocalAuth, &QAction::triggered, this, [=, this]() { show_local_auth_management(); });
     connect(actionSetTunProfile, &QAction::triggered, this, [=, this]() { assign_tun_profile_from_selection(); });
     connect(actionClearTunProfile, &QAction::triggered, this, [=, this]() { clear_tun_profile(); });
     connect(actionSetSystemProxyProfile, &QAction::triggered, this, [=, this]() { assign_system_proxy_profile_from_selection(); });
@@ -437,6 +455,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             action.method = GroupSortMethod::ByTraffic;
         } else if (logicalIndex == 5) {
             action.method = GroupSortMethod::ByLocalPort;
+        } else if (logicalIndex == 6) {
+            action.method = GroupSortMethod::ByAuthentication;
         } else {
             return;
         }
@@ -748,6 +768,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         actionSetLocalPort->setEnabled(selected.count() == 1);
         actionClearLocalPort->setEnabled(!selected.empty());
         actionCopyPortBoundConfig->setEnabled(!get_port_bound_profiles().isEmpty());
+        actionManageLocalAuth->setEnabled(true);
+        actionToggleLocalAuth->setEnabled(!selected.empty());
         actionSetTunProfile->setEnabled(selected.count() == 1);
         actionSetSystemProxyProfile->setEnabled(selected.count() == 1);
         actionClearTunProfile->setEnabled(Configs::dataManager->settingsRepo->tun_profile_id >= 0);
@@ -1916,7 +1938,8 @@ void MainWindow::refresh_status(const QString &traffic_update) {
         if (!Configs::dataManager->settingsRepo->spmode_vpn && Configs::dataManager->settingsRepo->spmode_system_proxy) tt << "[" + tr("System Proxy") + "]";
         if (Configs::dataManager->settingsRepo->spmode_vpn && Configs::dataManager->settingsRepo->spmode_system_proxy) tt << "[Tun+" + tr("System Proxy") + "]";
         tt << software_name;
-        if (!isTray) tt << QString(NKR_VERSION);
+        const auto version = QString(NKR_VERSION).trimmed();
+        if (!isTray && !version.isEmpty()) tt << "v" + version;
         if (!Configs::dataManager->settingsRepo->active_routing.isEmpty() && Configs::dataManager->settingsRepo->active_routing != "Default") {
             tt << "[" + Configs::dataManager->settingsRepo->active_routing + "]";
         }
@@ -2025,15 +2048,17 @@ void MainWindow::refresh_groups() {
 }
 
 void MainWindow::refresh_proxy_list_column_size() {
+    const int columnCount = profilesTableModel ? profilesTableModel->columnCount() : ui->profilesTableView->horizontalHeader()->count();
     if (is_all_groups_view()) {
         auto *hHeader = dynamic_cast<ProfilesTableFilterHeader*>(ui->profilesTableView->horizontalHeader());
         if (hHeader == nullptr) return;
         QTimer::singleShot(0, ui->profilesTableView, [=, this]() {
             hHeader->blockSignals(true);
-            for (int i = 0; i <= 5; i++) {
-                hHeader->setSectionResizeMode(i, QHeaderView::ResizeToContents);
+            for (int i = 0; i < columnCount; i++) {
+                const auto mode = (i == 1 || i == 2) ? QHeaderView::Stretch : QHeaderView::ResizeToContents;
+                hHeader->setSectionResizeMode(i, mode);
             }
-            ui->profilesTableView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+            ui->profilesTableView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
             hHeader->adjustPositions();
             hHeader->blockSignals(false);
         });
@@ -2041,7 +2066,7 @@ void MainWindow::refresh_proxy_list_column_size() {
     }
     auto group = Configs::dataManager->groupsRepo->CurrentGroup();
     if (!group) return;
-    if (!group->column_width.isEmpty() && group->column_width.size() < 6) {
+    if (!group->column_width.isEmpty() && group->column_width.size() < columnCount) {
         group->column_width.clear();
     }
 
@@ -2049,12 +2074,10 @@ void MainWindow::refresh_proxy_list_column_size() {
     QTimer::singleShot(0, ui->profilesTableView, [=, this]() {
         hHeader->blockSignals(true);
         if (group->column_width.isEmpty()) {
-            hHeader->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-            hHeader->setSectionResizeMode(1, QHeaderView::Stretch);
-            hHeader->setSectionResizeMode(2, QHeaderView::Stretch);
-            hHeader->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-            hHeader->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-            hHeader->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+            for (int i = 0; i < columnCount; i++) {
+                const auto mode = (i == 1 || i == 2) ? QHeaderView::Stretch : QHeaderView::ResizeToContents;
+                hHeader->setSectionResizeMode(i, mode);
+            }
             if (!group->calculated_column_width.empty() && group->calculated_column_width[0] > hHeader->sectionSize(0)) {
                 hHeader->setSectionResizeMode(0, QHeaderView::Fixed);
                 hHeader->resizeSection(0, group->calculated_column_width[0]);
@@ -2071,9 +2094,13 @@ void MainWindow::refresh_proxy_list_column_size() {
                 hHeader->setSectionResizeMode(5, QHeaderView::Fixed);
                 hHeader->resizeSection(5, group->calculated_column_width[5]);
             }
+            if (group->calculated_column_width.size() > 6 && group->calculated_column_width[6] > hHeader->sectionSize(6)) {
+                hHeader->setSectionResizeMode(6, QHeaderView::Fixed);
+                hHeader->resizeSection(6, group->calculated_column_width[6]);
+            }
             ui->profilesTableView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
             group->clearCalculatedColumnWidth();
-            for (int i=0;i<=5;i++) {
+            for (int i = 0; i < columnCount; i++) {
                 auto size = hHeader->sectionSize(i);
                 hHeader->setSectionResizeMode(i, QHeaderView::Interactive);
                 hHeader->resizeSection(i, size);
@@ -2081,9 +2108,13 @@ void MainWindow::refresh_proxy_list_column_size() {
             }
         } else {
             group->clearCalculatedColumnWidth();
-            for (int i=0;i<=5;i++) {
+            const int savedColumnCount = std::min(columnCount, static_cast<int>(group->column_width.size()));
+            for (int i = 0; i < savedColumnCount; i++) {
                 hHeader->setSectionResizeMode(i, QHeaderView::Interactive);
                 hHeader->resizeSection(i, group->column_width.at(i));
+            }
+            for (int i = savedColumnCount; i < columnCount; i++) {
+                hHeader->setSectionResizeMode(i, QHeaderView::ResizeToContents);
             }
             ui->profilesTableView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         }
@@ -2910,6 +2941,236 @@ void MainWindow::copy_port_bound_config() {
     }
 }
 
+QList<int> MainWindow::get_local_auth_management_profile_ids(const QList<int>& preferredIds) const {
+    QList<int> ids;
+    QSet<int> seen;
+    const auto append = [&](int id) {
+        if (id < 0 || seen.contains(id)) return;
+        ids << id;
+        seen.insert(id);
+    };
+
+    if (!preferredIds.isEmpty()) {
+        for (int id : preferredIds) append(id);
+        return ids;
+    }
+
+    for (int id : get_all_profile_ids_in_group_order()) append(id);
+    return ids;
+}
+
+void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
+    const auto ids = get_local_auth_management_profile_ids(profileIds);
+    if (ids.isEmpty()) {
+        MessageBoxWarning(tr("身份验证管理"), tr("No selected profiles or local port bindings are available."));
+        return;
+    }
+
+    auto profiles = Configs::dataManager->profilesRepo->GetProfileBatch(ids);
+    if (profiles.isEmpty()) {
+        MessageBoxWarning(tr("身份验证管理"), tr("No profiles are available."));
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("身份验证管理"));
+    dialog.resize(860, 520);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *hint = new QLabel(tr("Manage authentication for local port mappings. Enable rows require both username and password."), &dialog);
+    hint->setWordWrap(true);
+    layout->addWidget(hint);
+
+    auto *table = new QTableWidget(profiles.size(), 5, &dialog);
+    table->setHorizontalHeaderLabels({tr("Profile"), tr("Local Port"), tr("Enabled"), tr("Username"), tr("Password")});
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    table->verticalHeader()->setVisible(false);
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+
+    for (int row = 0; row < profiles.size(); ++row) {
+        const auto& profile = profiles[row];
+        if (profile == nullptr) continue;
+
+        auto *profileItem = new QTableWidgetItem(profile->outbound ? profile->outbound->DisplayTypeAndName() : profile->name);
+        profileItem->setData(Qt::UserRole, profile->id);
+        profileItem->setFlags(profileItem->flags() & ~Qt::ItemIsEditable);
+        table->setItem(row, 0, profileItem);
+
+        auto *portItem = new QTableWidgetItem(profile->local_port > 0 ? QString::number(profile->local_port) : QString());
+        portItem->setFlags(portItem->flags() & ~Qt::ItemIsEditable);
+        table->setItem(row, 1, portItem);
+
+        auto *enabledItem = new QTableWidgetItem();
+        enabledItem->setFlags((enabledItem->flags() | Qt::ItemIsUserCheckable) & ~Qt::ItemIsEditable);
+        enabledItem->setCheckState(profile->local_auth_enabled ? Qt::Checked : Qt::Unchecked);
+        table->setItem(row, 2, enabledItem);
+
+        table->setItem(row, 3, new QTableWidgetItem(profile->local_auth_user));
+        table->setItem(row, 4, new QTableWidgetItem(profile->local_auth_pass));
+    }
+    layout->addWidget(table);
+
+    auto *batchLayout = new QFormLayout();
+    auto *batchUser = new QLineEdit(&dialog);
+    auto *batchPass = new QLineEdit(&dialog);
+    batchPass->setEchoMode(QLineEdit::Password);
+    batchLayout->addRow(tr("Username"), batchUser);
+    batchLayout->addRow(tr("Password"), batchPass);
+    layout->addLayout(batchLayout);
+
+    auto *buttonLayout = new QHBoxLayout();
+    auto *enableSelected = new QPushButton(tr("Enable Selected"), &dialog);
+    auto *disableSelected = new QPushButton(tr("Disable Selected"), &dialog);
+    auto *applyCredentials = new QPushButton(tr("Apply Credentials to Selected"), &dialog);
+    buttonLayout->addWidget(enableSelected);
+    buttonLayout->addWidget(disableSelected);
+    buttonLayout->addWidget(applyCredentials);
+    buttonLayout->addStretch();
+    layout->addLayout(buttonLayout);
+
+    const auto selectedRows = [table]() {
+        QList<int> rows;
+        QSet<int> seen;
+        for (const QModelIndex& index : table->selectionModel()->selectedRows()) {
+            if (seen.contains(index.row())) continue;
+            rows << index.row();
+            seen.insert(index.row());
+        }
+        return rows;
+    };
+    const auto rowsOrAll = [table, selectedRows]() {
+        auto rows = selectedRows();
+        if (!rows.isEmpty()) return rows;
+        for (int row = 0; row < table->rowCount(); ++row) rows << row;
+        return rows;
+    };
+
+    connect(enableSelected, &QPushButton::clicked, &dialog, [=] {
+        for (int row : rowsOrAll()) {
+            if (auto *item = table->item(row, 2)) item->setCheckState(Qt::Checked);
+        }
+    });
+    connect(disableSelected, &QPushButton::clicked, &dialog, [=] {
+        for (int row : rowsOrAll()) {
+            if (auto *item = table->item(row, 2)) item->setCheckState(Qt::Unchecked);
+        }
+    });
+    connect(applyCredentials, &QPushButton::clicked, &dialog, [=] {
+        for (int row : rowsOrAll()) {
+            if (auto *userItem = table->item(row, 3)) userItem->setText(batchUser->text().trimmed());
+            if (auto *passItem = table->item(row, 4)) passItem->setText(batchPass->text());
+        }
+    });
+
+    auto *dialogButtons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addWidget(dialogButtons);
+    connect(dialogButtons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(dialogButtons, &QDialogButtonBox::accepted, &dialog, [&] {
+        for (int row = 0; row < table->rowCount(); ++row) {
+            const bool enabled = table->item(row, 2) != nullptr && table->item(row, 2)->checkState() == Qt::Checked;
+            const auto user = table->item(row, 3) != nullptr ? table->item(row, 3)->text().trimmed() : QString();
+            const auto pass = table->item(row, 4) != nullptr ? table->item(row, 4)->text() : QString();
+            if (enabled && (user.isEmpty() || pass.isEmpty())) {
+                MessageBoxWarning(tr("身份验证管理"), tr("Enabled authentication requires both username and password."));
+                return;
+            }
+        }
+        dialog.accept();
+    });
+
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    QMap<int, std::shared_ptr<Configs::Profile>> profileById;
+    for (const auto& profile : profiles) {
+        if (profile != nullptr) profileById.insert(profile->id, profile);
+    }
+
+    QList<std::shared_ptr<Configs::Profile>> changedProfiles;
+    QList<int> changedIds;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        auto *profileItem = table->item(row, 0);
+        if (profileItem == nullptr) continue;
+        const int id = profileItem->data(Qt::UserRole).toInt();
+        auto profile = profileById.value(id);
+        if (profile == nullptr) continue;
+
+        profile->local_auth_enabled = table->item(row, 2) != nullptr && table->item(row, 2)->checkState() == Qt::Checked;
+        profile->local_auth_user = table->item(row, 3) != nullptr ? table->item(row, 3)->text().trimmed() : QString();
+        profile->local_auth_pass = table->item(row, 4) != nullptr ? table->item(row, 4)->text() : QString();
+        changedProfiles << profile;
+        changedIds << profile->id;
+    }
+
+    if (changedProfiles.isEmpty()) return;
+    Configs::dataManager->profilesRepo->SaveBatch(changedProfiles);
+    refresh_proxy_list(changedIds);
+
+    if (running_port_bound_mode) {
+        const auto shouldRestart = QMessageBox::question(
+            this,
+            tr("身份验证管理"),
+            tr("Authentication changes affect the running local port configuration. Restart it now?")
+        );
+        if (shouldRestart == QMessageBox::Yes) {
+            start_port_bound_profiles();
+        }
+    }
+}
+
+void MainWindow::toggle_local_auth_for_selection() {
+    const auto ids = get_now_selected_list();
+    if (ids.isEmpty()) return;
+
+    auto profiles = Configs::dataManager->profilesRepo->GetProfileBatch(ids);
+    if (profiles.isEmpty()) return;
+
+    bool enable = false;
+    for (const auto& profile : profiles) {
+        if (profile != nullptr && !profile->local_auth_enabled) {
+            enable = true;
+            break;
+        }
+    }
+
+    QList<int> changedIds;
+    for (const auto& profile : profiles) {
+        if (profile == nullptr) continue;
+        profile->local_auth_enabled = enable;
+        if (enable) {
+            if (profile->local_auth_user.trimmed().isEmpty()) {
+                profile->local_auth_user = Configs::dataManager->settingsRepo->inbound_user.trimmed().isEmpty()
+                    ? QStringLiteral("user")
+                    : Configs::dataManager->settingsRepo->inbound_user.trimmed();
+            }
+            if (profile->local_auth_pass.isEmpty()) {
+                profile->local_auth_pass = Configs::dataManager->settingsRepo->inbound_pass.isEmpty()
+                    ? QUuid::createUuid().toString(QUuid::WithoutBraces).left(12)
+                    : Configs::dataManager->settingsRepo->inbound_pass;
+            }
+        }
+        changedIds << profile->id;
+    }
+
+    Configs::dataManager->profilesRepo->SaveBatch(profiles);
+    refresh_proxy_list(changedIds);
+
+    if (running_port_bound_mode) {
+        const auto shouldRestart = QMessageBox::question(
+            this,
+            tr("身份验证管理"),
+            tr("Authentication changes affect the running local port configuration. Restart it now?")
+        );
+        if (shouldRestart == QMessageBox::Yes) {
+            start_port_bound_profiles();
+        }
+    }
+}
+
 void MainWindow::saveProfileFocusState() {
     auto group = Configs::dataManager->groupsRepo->CurrentGroup();
     if (group == nullptr) return;
@@ -3222,10 +3483,7 @@ void MainWindow::on_tabWidget_customContextMenuRequested(const QPoint &p) {
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     if (event->type() == QEvent::MouseButtonPress) {
         auto mouseEvent = dynamic_cast<QMouseEvent *>(event);
-        if (obj == ui->label_running && mouseEvent->button() == Qt::LeftButton && running != nullptr) {
-            url_test_current();
-            return true;
-        } else if (obj == ui->label_inbound && mouseEvent->button() == Qt::LeftButton) {
+        if (obj == ui->label_inbound && mouseEvent->button() == Qt::LeftButton) {
             on_menu_basic_settings_triggered();
             return true;
         } else if (obj == ui->tabWidget && mouseEvent->button() == Qt::RightButton) {

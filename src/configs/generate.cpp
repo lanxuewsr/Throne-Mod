@@ -1438,11 +1438,16 @@ namespace Configs {
                 {"listen", Configs::dataManager->settingsRepo->inbound_address},
                 {"listen_port", profile->local_port}
             };
-            if (Configs::dataManager->settingsRepo->inbound_auth) {
+            if (profile->local_auth_enabled) {
+                if (profile->local_auth_user.isEmpty() || profile->local_auth_pass.isEmpty()) {
+                    res->error = QString("Authentication is enabled for %1, but username or password is empty.")
+                                     .arg(profile->outbound ? profile->outbound->DisplayTypeAndName() : profile->name);
+                    return res;
+                }
                 inboundObj["users"] = QJsonArray{
                     QJsonObject{
-                        {"username", Configs::dataManager->settingsRepo->inbound_user},
-                        {"password", Configs::dataManager->settingsRepo->inbound_pass}
+                        {"username", profile->local_auth_user},
+                        {"password", profile->local_auth_pass}
                     }
                 };
             }

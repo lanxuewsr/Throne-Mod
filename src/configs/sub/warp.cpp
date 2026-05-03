@@ -12,16 +12,37 @@
 
 namespace Configs_network {
     namespace {
-        int resolveProxyPort() {
+        std::shared_ptr<Configs::Profile> resolvePortBoundProxyProfile() {
             if (Configs::dataManager->settingsRepo->started_port_bound_mode &&
                 !Configs::dataManager->settingsRepo->started_port_bound_ids.isEmpty()) {
                 auto profile = Configs::dataManager->profilesRepo->GetProfile(
                     Configs::dataManager->settingsRepo->started_port_bound_ids.first());
                 if (profile != nullptr && profile->local_port > 0) {
-                    return profile->local_port;
+                    return profile;
                 }
             }
+            return nullptr;
+        }
+
+        int resolveProxyPort(const std::shared_ptr<Configs::Profile>& portBoundProfile) {
+            if (portBoundProfile != nullptr && portBoundProfile->local_port > 0) {
+                return portBoundProfile->local_port;
+            }
             return Configs::dataManager->settingsRepo->inbound_socks_port;
+        }
+
+        void applyProxyAuthentication(QNetworkProxy& proxy, const std::shared_ptr<Configs::Profile>& portBoundProfile) {
+            if (portBoundProfile != nullptr) {
+                if (portBoundProfile->local_auth_enabled) {
+                    proxy.setUser(portBoundProfile->local_auth_user);
+                    proxy.setPassword(portBoundProfile->local_auth_pass);
+                }
+                return;
+            }
+            if (Configs::dataManager->settingsRepo->inbound_auth) {
+                proxy.setUser(Configs::dataManager->settingsRepo->inbound_user);
+                proxy.setPassword(Configs::dataManager->settingsRepo->inbound_pass);
+            }
         }
     }
 
@@ -49,13 +70,11 @@ namespace Configs_network {
                 return config;
             }
             QNetworkProxy p;
+            auto portBoundProfile = resolvePortBoundProxyProfile();
             p.setType(QNetworkProxy::HttpProxy);
             p.setHostName(Configs::dataManager->settingsRepo->inbound_address == "::" ? "127.0.0.1" : Configs::dataManager->settingsRepo->inbound_address);
-            p.setPort(resolveProxyPort());
-            if (Configs::dataManager->settingsRepo->inbound_auth) {
-                p.setUser(Configs::dataManager->settingsRepo->inbound_user);
-                p.setPassword(Configs::dataManager->settingsRepo->inbound_pass);
-            }
+            p.setPort(resolveProxyPort(portBoundProfile));
+            applyProxyAuthentication(p, portBoundProfile);
             accessManager.setProxy(p);
         }
         // Set attribute

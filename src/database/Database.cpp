@@ -76,10 +76,10 @@ namespace Configs {
     void Database::execBatchInsertProfilesChunk(const std::vector<ProfileInsertRow>& rows) {
         if (rows.empty()) return;
         const size_t n = rows.size();
-        std::string sql = "INSERT INTO profiles (id, type, name, gid, local_port, latency, dl_speed, ul_speed, test_country, ip_out, outbound_json, traffic_dl, traffic_up) VALUES ";
+        std::string sql = "INSERT INTO profiles (id, type, name, gid, local_port, local_auth_enabled, local_auth_user, local_auth_pass, latency, dl_speed, ul_speed, test_country, ip_out, outbound_json, traffic_dl, traffic_up) VALUES ";
         for (size_t i = 0; i < n; ++i) {
             if (i > 0) sql += ",";
-            sql += "(?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            sql += "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         }
         try {
             SQLite::Statement stmt(db, sql);
@@ -90,6 +90,9 @@ namespace Configs {
                 stmt.bind(idx++, r.name);
                 stmt.bind(idx++, r.gid);
                 stmt.bind(idx++, r.local_port);
+                stmt.bind(idx++, r.local_auth_enabled ? 1 : 0);
+                stmt.bind(idx++, r.local_auth_user);
+                stmt.bind(idx++, r.local_auth_pass);
                 stmt.bind(idx++, r.latency);
                 stmt.bind(idx++, r.dl_speed);
                 stmt.bind(idx++, r.ul_speed);
@@ -109,10 +112,10 @@ namespace Configs {
     void Database::execBatchReplaceProfilesChunk(const std::vector<ProfileInsertRow>& rows) {
         if (rows.empty()) return;
         const size_t n = rows.size();
-        std::string sql = "INSERT OR REPLACE INTO profiles (id, type, name, gid, local_port, latency, dl_speed, ul_speed, test_country, ip_out, outbound_json, traffic_dl, traffic_up) VALUES ";
+        std::string sql = "INSERT OR REPLACE INTO profiles (id, type, name, gid, local_port, local_auth_enabled, local_auth_user, local_auth_pass, latency, dl_speed, ul_speed, test_country, ip_out, outbound_json, traffic_dl, traffic_up) VALUES ";
         for (size_t i = 0; i < n; ++i) {
             if (i > 0) sql += ",";
-            sql += "(?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            sql += "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         }
         try {
             SQLite::Statement stmt(db, sql);
@@ -123,6 +126,9 @@ namespace Configs {
                 stmt.bind(idx++, r.name);
                 stmt.bind(idx++, r.gid);
                 stmt.bind(idx++, r.local_port);
+                stmt.bind(idx++, r.local_auth_enabled ? 1 : 0);
+                stmt.bind(idx++, r.local_auth_user);
+                stmt.bind(idx++, r.local_auth_pass);
                 stmt.bind(idx++, r.latency);
                 stmt.bind(idx++, r.dl_speed);
                 stmt.bind(idx++, r.ul_speed);

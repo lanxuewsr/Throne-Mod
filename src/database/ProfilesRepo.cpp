@@ -39,6 +39,9 @@ namespace Configs {
                 name TEXT,
                 gid INTEGER NOT NULL DEFAULT 0,
                 local_port INTEGER NOT NULL DEFAULT 0,
+                local_auth_enabled INTEGER NOT NULL DEFAULT 0,
+                local_auth_user TEXT NOT NULL DEFAULT '',
+                local_auth_pass TEXT NOT NULL DEFAULT '',
                 latency INTEGER NOT NULL DEFAULT 0,
                 dl_speed TEXT,
                 ul_speed TEXT,
@@ -56,6 +59,15 @@ namespace Configs {
         if (!profileTableHasColumn(db, "local_port")) {
             db.exec("ALTER TABLE profiles ADD COLUMN local_port INTEGER NOT NULL DEFAULT 0");
         }
+        if (!profileTableHasColumn(db, "local_auth_enabled")) {
+            db.exec("ALTER TABLE profiles ADD COLUMN local_auth_enabled INTEGER NOT NULL DEFAULT 0");
+        }
+        if (!profileTableHasColumn(db, "local_auth_user")) {
+            db.exec("ALTER TABLE profiles ADD COLUMN local_auth_user TEXT NOT NULL DEFAULT ''");
+        }
+        if (!profileTableHasColumn(db, "local_auth_pass")) {
+            db.exec("ALTER TABLE profiles ADD COLUMN local_auth_pass TEXT NOT NULL DEFAULT ''");
+        }
 
         db.exec("CREATE INDEX IF NOT EXISTS idx_profiles_name ON profiles(name)");
     }
@@ -69,6 +81,9 @@ namespace Configs {
         json["id"] = profile->id;
         json["gid"] = profile->gid;
         json["local_port"] = profile->local_port;
+        json["local_auth_enabled"] = profile->local_auth_enabled;
+        json["local_auth_user"] = profile->local_auth_user;
+        json["local_auth_pass"] = profile->local_auth_pass;
         json["latency"] = profile->latency;
         json["dl_speed"] = profile->dl_speed;
         json["ul_speed"] = profile->ul_speed;
@@ -95,6 +110,9 @@ namespace Configs {
         profile->id = json["id"].toInt();
         profile->gid = json["gid"].toInt();
         profile->local_port = json["local_port"].toInt();
+        profile->local_auth_enabled = json["local_auth_enabled"].toBool();
+        profile->local_auth_user = json["local_auth_user"].toString();
+        profile->local_auth_pass = json["local_auth_pass"].toString();
         profile->latency = json["latency"].toInt();
         profile->dl_speed = json["dl_speed"].toString();
         profile->ul_speed = json["ul_speed"].toString();
@@ -190,7 +208,8 @@ namespace Configs {
         if (exists) {
             db.exec(R"(
                 UPDATE profiles 
-                SET type = ?, name = ?, gid = ?, local_port = ?, latency = ?, dl_speed = ?, ul_speed = ?,
+                SET type = ?, name = ?, gid = ?, local_port = ?, local_auth_enabled = ?,
+                    local_auth_user = ?, local_auth_pass = ?, latency = ?, dl_speed = ?, ul_speed = ?,
                     test_country = ?, ip_out = ?, outbound_json = ?,
                     traffic_dl = ?, traffic_up = ?, updated_at = strftime('%s', 'now')
                 WHERE id = ?
@@ -199,6 +218,9 @@ namespace Configs {
                 name.toStdString(),
                 profile->gid,
                 profile->local_port,
+                profile->local_auth_enabled,
+                profile->local_auth_user.toStdString(),
+                profile->local_auth_pass.toStdString(),
                 profile->latency,
                 profile->dl_speed.toStdString(),
                 profile->ul_speed.toStdString(),
@@ -212,15 +234,19 @@ namespace Configs {
         } else {
             db.exec(R"(
                 INSERT INTO profiles 
-                (id, type, name, gid, local_port, latency, dl_speed, ul_speed, test_country,
+                (id, type, name, gid, local_port, local_auth_enabled, local_auth_user, local_auth_pass,
+                latency, dl_speed, ul_speed, test_country,
                 ip_out, outbound_json, traffic_dl, traffic_up)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             )",
                 id,
                 profile->type.toStdString(),
                 name.toStdString(),
                 profile->gid,
                 profile->local_port,
+                profile->local_auth_enabled,
+                profile->local_auth_user.toStdString(),
+                profile->local_auth_pass.toStdString(),
                 profile->latency,
                 profile->dl_speed.toStdString(),
                 profile->ul_speed.toStdString(),
@@ -245,6 +271,9 @@ namespace Configs {
         row.name = name.toStdString();
         row.gid = gid;
         row.local_port = profile->local_port;
+        row.local_auth_enabled = profile->local_auth_enabled;
+        row.local_auth_user = profile->local_auth_user.toStdString();
+        row.local_auth_pass = profile->local_auth_pass.toStdString();
         row.latency = profile->latency;
         row.dl_speed = profile->dl_speed.toStdString();
         row.ul_speed = profile->ul_speed.toStdString();
@@ -263,27 +292,31 @@ namespace Configs {
         json["name"] = QString::fromStdString(stmt.getColumn(2).getText());
         json["gid"] = stmt.getColumn(3).getInt();
         json["local_port"] = stmt.getColumn(4).getInt();
-        json["latency"] = stmt.getColumn(5).getInt();
-        json["dl_speed"] = QString::fromStdString(stmt.getColumn(6).getText());
-        json["ul_speed"] = QString::fromStdString(stmt.getColumn(7).getText());
-        json["test_country"] = QString::fromStdString(stmt.getColumn(8).getText());
-        json["ip_out"] = QString::fromStdString(stmt.getColumn(9).getText());
+        json["local_auth_enabled"] = stmt.getColumn(5).getInt() != 0;
+        json["local_auth_user"] = QString::fromStdString(stmt.getColumn(6).getText());
+        json["local_auth_pass"] = QString::fromStdString(stmt.getColumn(7).getText());
+        json["latency"] = stmt.getColumn(8).getInt();
+        json["dl_speed"] = QString::fromStdString(stmt.getColumn(9).getText());
+        json["ul_speed"] = QString::fromStdString(stmt.getColumn(10).getText());
+        json["test_country"] = QString::fromStdString(stmt.getColumn(11).getText());
+        json["ip_out"] = QString::fromStdString(stmt.getColumn(12).getText());
         
-        QString outboundJsonStr = QString::fromStdString(stmt.getColumn(10).getText());
+        QString outboundJsonStr = QString::fromStdString(stmt.getColumn(13).getText());
         QJsonDocument outboundDoc = QJsonDocument::fromJson(outboundJsonStr.toUtf8());
         if (!outboundDoc.isNull() && outboundDoc.isObject()) {
             json["outbound"] = outboundDoc.object();
         }
         
-        json["traffic_dl"] = static_cast<qint64>(stmt.getColumn(11).getInt64());
-        json["traffic_up"] = static_cast<qint64>(stmt.getColumn(12).getInt64());
+        json["traffic_dl"] = static_cast<qint64>(stmt.getColumn(14).getInt64());
+        json["traffic_up"] = static_cast<qint64>(stmt.getColumn(15).getInt64());
         
         return profileFromJson(json);
     }
 
     std::shared_ptr<Profile> ProfilesRepo::loadFromDatabase(int id) const {
         auto query = db.query(R"(
-            SELECT id, type, name, gid, local_port, latency, dl_speed, ul_speed, test_country,
+            SELECT id, type, name, gid, local_port, local_auth_enabled, local_auth_user, local_auth_pass,
+                   latency, dl_speed, ul_speed, test_country,
                    ip_out, outbound_json, traffic_dl, traffic_up
             FROM profiles WHERE id = ?
         )", id);
@@ -422,8 +455,8 @@ namespace Configs {
             if (i > 0) idList += ",";
             idList += QString::number(chunkIds[i]);
         }
-        std::string sql = "SELECT id, type, name, gid, local_port, latency, dl_speed, ul_speed, test_country, "
-                         "ip_out, outbound_json, traffic_dl, traffic_up FROM profiles WHERE id IN (" +
+        std::string sql = "SELECT id, type, name, gid, local_port, local_auth_enabled, local_auth_user, local_auth_pass, "
+                         "latency, dl_speed, ul_speed, test_country, ip_out, outbound_json, traffic_dl, traffic_up FROM profiles WHERE id IN (" +
                          idList.toStdString() + ") ORDER BY id";
         auto query = db.query(sql);
         if (!query) return result;

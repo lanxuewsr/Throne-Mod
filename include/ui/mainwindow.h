@@ -284,6 +284,12 @@ private:
 
     void copy_port_bound_config();
 
+    QList<int> get_local_auth_management_profile_ids(const QList<int>& preferredIds = {}) const;
+
+    void show_local_auth_management(const QList<int>& profileIds = {});
+
+    void toggle_local_auth_for_selection();
+
     void saveProfileFocusState();
 
     void restoreProfileFocusState();
