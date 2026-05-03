@@ -132,7 +132,7 @@ QVariant ProfilesTableModel::headerData(int section, Qt::Orientation orientation
         case 3: return tr("Test Result");
         case 4: return tr("Traffic");
         case 5: return tr("Local Port");
-        case 6: return tr("Authentication");
+        case 6: return QStringLiteral("身份验证");
         default: return {};
         }
     }

@@ -2982,7 +2982,7 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     layout->addWidget(hint);
 
     auto *table = new QTableWidget(profiles.size(), 5, &dialog);
-    table->setHorizontalHeaderLabels({tr("Profile"), tr("Local Port"), tr("Enabled"), tr("Username"), tr("Password")});
+        table->setHorizontalHeaderLabels({tr("Profile"), tr("Local Port"), QStringLiteral("开启"), tr("Username"), tr("Password")});
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     table->verticalHeader()->setVisible(false);
