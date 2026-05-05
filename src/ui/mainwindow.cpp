@@ -6,6 +6,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QHeaderView>
+#include <QItemDelegate>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QTableWidget>
@@ -105,6 +106,40 @@ QString buildModeStatusHtml(QLabel *label, const QString &prefix, const QString 
     }
     return html;
 }
+
+class ProfilesTableEditDelegate : public QItemDelegate {
+public:
+    explicit ProfilesTableEditDelegate(QObject *parent = nullptr) : QItemDelegate(parent) {}
+
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
+        if (index.column() == 6) {
+            auto *combo = new QComboBox(parent);
+            combo->addItems({QStringLiteral("开启"), QStringLiteral("关闭")});
+            return combo;
+        }
+        return QItemDelegate::createEditor(parent, option, index);
+    }
+
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override {
+        if (index.column() == 6) {
+            auto *combo = qobject_cast<QComboBox*>(editor);
+            if (combo == nullptr) return;
+            combo->setCurrentText(index.data(Qt::DisplayRole).toString().isEmpty() ? QStringLiteral("关闭") : QStringLiteral("开启"));
+            return;
+        }
+        QItemDelegate::setEditorData(editor, index);
+    }
+
+    void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const override {
+        if (index.column() == 6) {
+            auto *combo = qobject_cast<QComboBox*>(editor);
+            if (combo == nullptr) return;
+            model->setData(index, combo->currentText(), Qt::EditRole);
+            return;
+        }
+        QItemDelegate::setModelData(editor, model, index);
+    }
+};
 }
 
 void UI_InitMainWindow() {
@@ -376,6 +411,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // table UI: model-backed view with on-demand row data
     profilesTableModel = new ProfilesTableModel(this);
     ui->profilesTableView->setModel(profilesTableModel);
+    ui->profilesTableView->setItemDelegate(new ProfilesTableEditDelegate(ui->profilesTableView));
     auto *actionSetLocalPort = new QAction(tr("Set Local Port..."), this);
     auto *actionClearLocalPort = new QAction(tr("Clear Local Port Binding"), this);
     auto *actionCopyPortBoundConfig = new QAction(tr("Copy Port-Bound Config"), this);
@@ -1906,8 +1942,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     }
     //
     auto display_socks = DisplayAddress(Configs::dataManager->settingsRepo->inbound_address, Configs::dataManager->settingsRepo->inbound_socks_port);
-    auto inbound_disabled = Configs::dataManager->settingsRepo->disable_mixed_inbound;
-    auto inbound_txt = QString("Mixed: %1").arg(inbound_disabled ? "Disabled" : display_socks);
+    auto inbound_txt = QString("Mixed: %1").arg(display_socks);
     if (running_port_bound_mode) {
         QStringList boundPorts;
         for (const auto id : running_port_bound_profile_ids) {
@@ -2161,6 +2196,10 @@ void MainWindow::on_profilesTableView_doubleClicked(const QModelIndex &index) {
         emit profile_selected(id);
         select_mode = false;
         refresh_status();
+        return;
+    }
+    if (index.column() == 5 || index.column() == 6) {
+        ui->profilesTableView->edit(index);
         return;
     }
     auto dialog = new DialogEditProfile("", id, this);
@@ -2762,6 +2801,20 @@ std::shared_ptr<Configs::Profile> MainWindow::find_port_binding_conflict(int por
     return nullptr;
 }
 
+void MainWindow::ensure_local_auth_credentials(const std::shared_ptr<Configs::Profile>& profile) const {
+    if (profile == nullptr) return;
+    if (profile->local_auth_user.trimmed().isEmpty()) {
+        profile->local_auth_user = Configs::dataManager->settingsRepo->inbound_user.trimmed().isEmpty()
+            ? QStringLiteral("user")
+            : Configs::dataManager->settingsRepo->inbound_user.trimmed();
+    }
+    if (profile->local_auth_pass.isEmpty()) {
+        profile->local_auth_pass = Configs::dataManager->settingsRepo->inbound_pass.isEmpty()
+            ? QUuid::createUuid().toString(QUuid::WithoutBraces).left(12)
+            : Configs::dataManager->settingsRepo->inbound_pass;
+    }
+}
+
 int MainWindow::get_single_selected_profile_id() {
     auto selected = get_now_selected_list();
     if (selected.count() != 1) {
@@ -2960,17 +3013,26 @@ QList<int> MainWindow::get_local_auth_management_profile_ids(const QList<int>& p
 }
 
 void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
-    const auto ids = get_local_auth_management_profile_ids(profileIds);
-    if (ids.isEmpty()) {
+    const bool hasExplicitSelection = !profileIds.isEmpty();
+    const auto selectedIds = hasExplicitSelection ? get_local_auth_management_profile_ids(profileIds) : QList<int>{};
+    const auto allIds = get_local_auth_management_profile_ids();
+    if (selectedIds.isEmpty() && allIds.isEmpty()) {
         MessageBoxWarning(tr("身份验证管理"), tr("No selected profiles or local port bindings are available."));
         return;
     }
 
-    auto profiles = Configs::dataManager->profilesRepo->GetProfileBatch(ids);
+    auto profiles = Configs::dataManager->profilesRepo->GetProfileBatch(allIds);
     if (profiles.isEmpty()) {
         MessageBoxWarning(tr("身份验证管理"), tr("No profiles are available."));
         return;
     }
+
+    QMap<int, std::shared_ptr<Configs::Profile>> profileById;
+    for (const auto& profile : profiles) {
+        if (profile != nullptr) profileById.insert(profile->id, profile);
+    }
+    QSet<int> selectedSet;
+    for (int id : selectedIds) selectedSet.insert(id);
 
     QDialog dialog(this);
     dialog.setWindowTitle(tr("身份验证管理"));
@@ -2981,8 +3043,13 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     hint->setWordWrap(true);
     layout->addWidget(hint);
 
-    auto *table = new QTableWidget(profiles.size(), 5, &dialog);
-        table->setHorizontalHeaderLabels({tr("Profile"), tr("Local Port"), QStringLiteral("开启"), tr("Username"), tr("Password")});
+    auto *hideUnselected = new QCheckBox(QStringLiteral("隐藏未选中节点"), &dialog);
+    hideUnselected->setChecked(hasExplicitSelection);
+    hideUnselected->setEnabled(hasExplicitSelection);
+    layout->addWidget(hideUnselected);
+
+    auto *table = new QTableWidget(0, 5, &dialog);
+    table->setHorizontalHeaderLabels({tr("Profile"), tr("Local Port"), QStringLiteral("身份验证"), tr("Username"), tr("Password")});
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     table->verticalHeader()->setVisible(false);
@@ -2992,10 +3059,10 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
 
-    for (int row = 0; row < profiles.size(); ++row) {
-        const auto& profile = profiles[row];
-        if (profile == nullptr) continue;
-
+    const auto appendProfileRow = [table](const std::shared_ptr<Configs::Profile>& profile) {
+        if (profile == nullptr) return;
+        const int row = table->rowCount();
+        table->insertRow(row);
         auto *profileItem = new QTableWidgetItem(profile->outbound ? profile->outbound->DisplayTypeAndName() : profile->name);
         profileItem->setData(Qt::UserRole, profile->id);
         profileItem->setFlags(profileItem->flags() & ~Qt::ItemIsEditable);
@@ -3012,7 +3079,23 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
 
         table->setItem(row, 3, new QTableWidgetItem(profile->local_auth_user));
         table->setItem(row, 4, new QTableWidgetItem(profile->local_auth_pass));
-    }
+    };
+    const auto reloadRows = [=, &profileById]() {
+        table->setRowCount(0);
+        const bool hide = hideUnselected->isChecked() && hasExplicitSelection;
+        const QList<int> idsToShow = hide ? selectedIds : allIds;
+        for (int id : idsToShow) appendProfileRow(profileById.value(id));
+        table->clearSelection();
+        if (!hide && hasExplicitSelection) {
+            for (int row = 0; row < table->rowCount(); ++row) {
+                auto *item = table->item(row, 0);
+                if (item != nullptr && selectedSet.contains(item->data(Qt::UserRole).toInt())) {
+                    table->selectRow(row);
+                }
+            }
+        }
+    };
+    reloadRows();
     layout->addWidget(table);
 
     auto *batchLayout = new QFormLayout();
@@ -3066,6 +3149,9 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
             if (auto *passItem = table->item(row, 4)) passItem->setText(batchPass->text());
         }
     });
+    connect(hideUnselected, &QCheckBox::toggled, &dialog, [=, &reloadRows](bool) {
+        reloadRows();
+    });
 
     auto *dialogButtons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     layout->addWidget(dialogButtons);
@@ -3084,11 +3170,6 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     });
 
     if (dialog.exec() != QDialog::Accepted) return;
-
-    QMap<int, std::shared_ptr<Configs::Profile>> profileById;
-    for (const auto& profile : profiles) {
-        if (profile != nullptr) profileById.insert(profile->id, profile);
-    }
 
     QList<std::shared_ptr<Configs::Profile>> changedProfiles;
     QList<int> changedIds;
@@ -3142,16 +3223,7 @@ void MainWindow::toggle_local_auth_for_selection() {
         if (profile == nullptr) continue;
         profile->local_auth_enabled = enable;
         if (enable) {
-            if (profile->local_auth_user.trimmed().isEmpty()) {
-                profile->local_auth_user = Configs::dataManager->settingsRepo->inbound_user.trimmed().isEmpty()
-                    ? QStringLiteral("user")
-                    : Configs::dataManager->settingsRepo->inbound_user.trimmed();
-            }
-            if (profile->local_auth_pass.isEmpty()) {
-                profile->local_auth_pass = Configs::dataManager->settingsRepo->inbound_pass.isEmpty()
-                    ? QUuid::createUuid().toString(QUuid::WithoutBraces).left(12)
-                    : Configs::dataManager->settingsRepo->inbound_pass;
-            }
+            ensure_local_auth_credentials(profile);
         }
         changedIds << profile->id;
     }

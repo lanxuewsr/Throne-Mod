@@ -48,7 +48,6 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ui->test_timeout->setText(Int2String(Configs::dataManager->settingsRepo->speed_test_timeout_ms));
     ui->simple_down_url->setText(Configs::dataManager->settingsRepo->simple_dl_url);
     ui->allow_beta->setChecked(Configs::dataManager->settingsRepo->allow_beta_update);
-    ui->disable_mixed_inbound->setChecked(Configs::dataManager->settingsRepo->disable_mixed_inbound);
     D_LOAD_BOOL(inbound_auth)
     D_LOAD_STRING(inbound_user)
     D_LOAD_STRING(inbound_pass)
@@ -281,7 +280,6 @@ void DialogBasicSettings::accept() {
     Configs::dataManager->settingsRepo->url_test_timeout_ms = ui->url_timeout->text().toInt();
     Configs::dataManager->settingsRepo->speed_test_timeout_ms = ui->test_timeout->text().toInt();
     Configs::dataManager->settingsRepo->allow_beta_update = ui->allow_beta->isChecked();
-    Configs::dataManager->settingsRepo->disable_mixed_inbound = ui->disable_mixed_inbound->isChecked();
     D_SAVE_BOOL(inbound_auth)
     D_SAVE_STRING(inbound_user)
     D_SAVE_STRING(inbound_pass)

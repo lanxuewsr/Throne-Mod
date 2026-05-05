@@ -96,6 +96,10 @@ public:
 
     void setDownloadReport(const DownloadProgressReport& report, bool show);
 
+    std::shared_ptr<Configs::Profile> find_port_binding_conflict(int port, int excludeProfileId = -1) const;
+
+    void ensure_local_auth_credentials(const std::shared_ptr<Configs::Profile>& profile) const;
+
 signals:
 
     void profile_selected(int id);
@@ -263,8 +267,6 @@ private:
     std::shared_ptr<Configs::Profile> get_tun_profile() const;
 
     std::shared_ptr<Configs::Profile> get_system_proxy_profile() const;
-
-    std::shared_ptr<Configs::Profile> find_port_binding_conflict(int port, int excludeProfileId = -1) const;
 
     int get_single_selected_profile_id();
 

@@ -977,13 +977,6 @@ void MainWindow::start_port_bound_profiles(const QList<int>& profileIds) {
 }
 
 void MainWindow::set_spmode_system_proxy(bool enable, bool save) {
-    if (enable && Configs::dataManager->settingsRepo->disable_mixed_inbound) {
-        runOnUiThread([=] {
-           MessageBoxWarning("Invalid Operation", "Cannot set system proxy when mixed inbound is disabled.");
-        });
-        ui->checkBox_SystemProxy->setChecked(false);
-        return;
-    }
     if (enable && Configs::dataManager->settingsRepo->system_proxy_profile_id < 0) {
         runOnUiThread([=] {
             MessageBoxWarning("Invalid Operation", tr("Please select a system proxy node first."));

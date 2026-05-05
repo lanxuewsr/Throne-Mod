@@ -5,9 +5,28 @@
 #include <QApplication>
 #include <QMimeData>
 #include <QPalette>
+#include <QMessageBox>
 
 #include "include/database/GroupsRepo.h"
 #include "include/database/ProfilesRepo.h"
+#include "include/ui/mainwindow.h"
+
+namespace {
+    void promptRestartPortBoundIfRunning(int profileId) {
+        if (!Configs::dataManager->settingsRepo->started_port_bound_mode ||
+            !Configs::dataManager->settingsRepo->started_port_bound_ids.contains(profileId)) {
+            return;
+        }
+        const auto shouldRestart = QMessageBox::question(
+            GetMainWindow(),
+            QObject::tr("身份验证管理"),
+            QObject::tr("This change affects the running local port configuration. Restart it now?")
+        );
+        if (shouldRestart == QMessageBox::Yes) {
+            GetMainWindow()->start_port_bound_profiles();
+        }
+    }
+}
 
 ProfilesTableModel::ProfilesTableModel(QObject *parent)
     : QAbstractTableModel(parent) {}
@@ -25,9 +44,76 @@ int ProfilesTableModel::columnCount(const QModelIndex &parent) const {
 Qt::ItemFlags ProfilesTableModel::flags(const QModelIndex &index) const {
     Qt::ItemFlags defaultFlags = QAbstractTableModel::flags(index);
     if (index.isValid()) {
+        if (index.column() == 5 || index.column() == 6) {
+            return Qt::ItemIsEditable | Qt::ItemIsDragEnabled | defaultFlags;
+        }
         return Qt::ItemIsDragEnabled | defaultFlags;
     }
     return Qt::ItemIsDropEnabled | defaultFlags;
+}
+
+bool ProfilesTableModel::setData(const QModelIndex &index, const QVariant &value, int role) {
+    if (!index.isValid() || role != Qt::EditRole || index.row() < 0 || index.row() >= m_profileIds.size()) {
+        return false;
+    }
+
+    const int profileId = m_profileIds[index.row()];
+    auto profile = Configs::dataManager->profilesRepo->GetProfile(profileId);
+    if (!profile) return false;
+
+    if (index.column() == 5) {
+        const QString text = value.toString().trimmed();
+        int port = 0;
+        if (!text.isEmpty()) {
+            bool ok = false;
+            port = text.toInt(&ok);
+            if (!ok || port < 1 || port > 65535) {
+                QMessageBox::warning(GetMainWindow(), tr("Invalid Local Port"), tr("Please enter a number from 1 to 65535, or clear the cell to remove the binding."));
+                return false;
+            }
+            if (auto conflict = GetMainWindow()->find_port_binding_conflict(port, profile->id); conflict != nullptr) {
+                QMessageBox::warning(
+                    GetMainWindow(),
+                    tr("Port Conflict"),
+                    tr("Port %1 is already bound to %2. Please clear that binding first.")
+                        .arg(port)
+                        .arg(conflict->outbound ? conflict->outbound->DisplayTypeAndName() : conflict->name)
+                );
+                return false;
+            }
+        }
+
+        if (profile->local_port == port) return false;
+        profile->local_port = port;
+        Configs::dataManager->profilesRepo->Save(profile);
+        refreshProfileId(profile->id);
+        promptRestartPortBoundIfRunning(profile->id);
+        return true;
+    }
+
+    if (index.column() == 6) {
+        const QString text = value.toString().trimmed();
+        bool enable = profile->local_auth_enabled;
+        if (text == QStringLiteral("开启") || text == QStringLiteral("已开启")) {
+            enable = true;
+        } else if (text == QStringLiteral("关闭") || text.isEmpty()) {
+            enable = false;
+        } else {
+            return false;
+        }
+
+        if (profile->local_auth_enabled == enable) return false;
+        profile->local_auth_enabled = enable;
+        if (enable) {
+            GetMainWindow()->ensure_local_auth_credentials(profile);
+        }
+        Configs::dataManager->profilesRepo->Save(profile);
+        refreshProfileId(profile->id);
+        promptRestartPortBoundIfRunning(profile->id);
+        return true;
+    }
+
+    return false;
 }
 
 Qt::DropActions ProfilesTableModel::supportedDropActions() const {
@@ -99,6 +185,13 @@ QVariant ProfilesTableModel::data(const QModelIndex &index, int role) const {
                            Configs::dataManager->settingsRepo->started_port_bound_ids.contains(profile->id);
     QColor linkColor = isRunning ? QApplication::palette().link().color() : QColor();
 
+    if (role == Qt::EditRole) {
+        switch (index.column()) {
+        case 5: return profile->local_port > 0 ? QString::number(profile->local_port) : QString();
+        case 6: return profile->local_auth_enabled ? QStringLiteral("开启") : QStringLiteral("关闭");
+        default: return {};
+        }
+    }
     if (role == Qt::DisplayRole) {
         switch (index.column()) {
         case 0: return profile->outbound ? profile->outbound->DisplayType() : QString();
@@ -107,7 +200,7 @@ QVariant ProfilesTableModel::data(const QModelIndex &index, int role) const {
         case 3: return profile->DisplayTestResult();
         case 4: return profile->DisplayTraffic();
         case 5: return profile->local_port > 0 ? QString::number(profile->local_port) : QString();
-        case 6: return profile->local_auth_enabled ? QStringLiteral("开启") : QString();
+        case 6: return profile->local_auth_enabled ? QStringLiteral("已开启") : QString();
         default: return {};
         }
     }

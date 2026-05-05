@@ -208,13 +208,6 @@ QTabBar::tab:hover:!selected {
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
-           <widget class="QCheckBox" name="disable_mixed_inbound">
-            <property name="text">
-             <string>Disable Mixed Inbound</string>
-            </property>
-           </widget>
-          </item>
          </layout>
         </widget>
        </item>

@@ -92,7 +92,6 @@ namespace Configs {
             else if (key == "enable_tun_routing") repo.enable_tun_routing = value.toBool();
             else if (key == "proxy_scheme") repo.proxy_scheme = value.toString();
             else if (key == "allow_stopping_active_profile") repo.allow_stopping_active_profile = value.toBool();
-            else if (key == "disable_mixed_inbound") repo.disable_mixed_inbound = value.toBool();
             else if (key == "inbound_auth") repo.inbound_auth = value.toBool();
             else if (key == "inbound_user") repo.inbound_user = value.toString();
             else if (key == "inbound_pass") repo.inbound_pass = value.toString();
@@ -191,8 +190,7 @@ namespace Configs {
             "enable_warp",
             "enable_dns_routing",
             "inbound_auth",
-        "allow_stopping_active_profile",
-        "disable_mixed_inbound"
+        "allow_stopping_active_profile"
         };
 
         const QSet<QString> intKeys = {
@@ -525,8 +523,7 @@ namespace Configs {
             {"inbound_auth", inbound_auth},
             {"inbound_user", inbound_user},
             {"inbound_pass", inbound_pass},
-            {"allow_stopping_active_profile", allow_stopping_active_profile},
-            {"disable_mixed_inbound", disable_mixed_inbound}
+            {"allow_stopping_active_profile", allow_stopping_active_profile}
         };
 
         std::vector<std::pair<std::string, std::string>> keyValues;
