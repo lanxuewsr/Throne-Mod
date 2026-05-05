@@ -99,10 +99,38 @@ QTabBar::tab:hover:!selected {
           <string>Basic Settings</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_9">
-          <item row="2" column="2">
-           <widget class="QLineEdit" name="inbound_user"/>
+          <item row="1" column="1">
+           <widget class="QLabel" name="label">
+            <property name="text">
+             <string>Listen Address</string>
+            </property>
+           </widget>
           </item>
-          <item row="4" column="5">
+          <item row="1" column="2" colspan="3">
+           <widget class="QLineEdit" name="inbound_address"/>
+          </item>
+          <item row="2" column="2">
+           <widget class="QPushButton" name="custom_inbound_edit">
+            <property name="text">
+             <string>Edit</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLabel" name="label_11">
+            <property name="text">
+             <string>Custom Inbound</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLabel" name="proxy_scheme_l">
+            <property name="text">
+             <string>Proxy Format</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2" colspan="3">
            <widget class="QComboBox" name="proxy_scheme">
             <item>
              <property name="text">
@@ -121,65 +149,22 @@ QTabBar::tab:hover:!selected {
             </item>
            </widget>
           </item>
-          <item row="1" column="6">
-           <widget class="QCheckBox" name="random_listen_port">
-            <property name="toolTip">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Selects a random available port on every run&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-            </property>
-            <property name="text">
-             <string>Random port</string>
-            </property>
-           </widget>
-          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_system_proxy_mode">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
+          <string>System Proxy Mode Settings</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_system_proxy_mode">
           <item row="1" column="1">
-           <widget class="QLabel" name="label">
-            <property name="text">
-             <string>Listen Address</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="5">
-           <widget class="QLineEdit" name="inbound_socks_port">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="2" colspan="2">
-           <widget class="QLineEdit" name="inbound_address"/>
-          </item>
-          <item row="4" column="2">
-           <widget class="QPushButton" name="custom_inbound_edit">
-            <property name="text">
-             <string>Edit</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QLabel" name="inbound_user_l">
-            <property name="text">
-             <string>Inbound Username</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QLabel" name="label_11">
-            <property name="text">
-             <string>Custom Inbound</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="4">
-           <widget class="QLabel" name="inbound_pass_l">
-            <property name="text">
-             <string>Inbound Password</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="4">
            <widget class="QLabel" name="inbound_socks_port_l">
             <property name="toolTip">
              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Socks
@@ -191,15 +176,45 @@ QTabBar::tab:hover:!selected {
             </property>
            </widget>
           </item>
-          <item row="4" column="4">
-           <widget class="QLabel" name="proxy_scheme_l">
+          <item row="1" column="2">
+           <widget class="QLineEdit" name="inbound_socks_port">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QCheckBox" name="random_listen_port">
+            <property name="toolTip">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Selects a random available port on every run&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
             <property name="text">
-             <string>Proxy Format</string>
+             <string>Random port</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLabel" name="inbound_user_l">
+            <property name="text">
+             <string>Inbound Username</string>
             </property>
            </widget>
           </item>
           <item row="2" column="5">
            <widget class="QLineEdit" name="inbound_pass"/>
+          </item>
+          <item row="2" column="2">
+           <widget class="QLineEdit" name="inbound_user"/>
+          </item>
+          <item row="2" column="4">
+           <widget class="QLabel" name="inbound_pass_l">
+            <property name="text">
+             <string>Inbound Password</string>
+            </property>
+           </widget>
           </item>
           <item row="2" column="6">
            <widget class="QCheckBox" name="inbound_auth">
@@ -212,7 +227,7 @@ QTabBar::tab:hover:!selected {
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="groupBox_3">
+        <widget class="QGroupBox" name="groupBox_testing">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
            <horstretch>0</horstretch>

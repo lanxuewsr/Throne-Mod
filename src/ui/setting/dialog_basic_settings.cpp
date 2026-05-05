@@ -29,7 +29,11 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ADD_ASTERISK(this);
 
     // Common
-    ui->inbound_socks_port_l->setText(ui->inbound_socks_port_l->text().replace("Socks", "Mixed (SOCKS+HTTP)"));
+    ui->inbound_socks_port_l->setText(tr("System Proxy Port"));
+    ui->random_listen_port->setToolTip(tr("Selects a random available system proxy port on every run."));
+    ui->inbound_user_l->setText(tr("System Proxy Username"));
+    ui->inbound_pass_l->setText(tr("System Proxy Password"));
+    ui->inbound_auth->setText(tr("Enable System Proxy Authorization"));
     ui->log_level->addItems(QString("trace debug info warn error fatal panic").split(" "));
     ui->xray_loglevel->addItems(Configs::Xray::XrayLogLevels);
     ui->mux_protocol->addItems({"h2mux", "smux", "yamux"});
