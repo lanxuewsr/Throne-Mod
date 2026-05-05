@@ -49,6 +49,8 @@ namespace Configs {
 
         bool applyNetworkSetting(SettingsRepo& repo, const QString& key, const QVariant& value) {
             if (key == "net_use_proxy") repo.net_use_proxy = value.toBool();
+            else if (key == "app_request_proxy_mode") repo.app_request_proxy_mode = value.toString();
+            else if (key == "app_request_proxy_profile_id") repo.app_request_proxy_profile_id = value.toInt();
             else if (key == "net_insecure") repo.net_insecure = value.toBool();
             else if (key == "user_agent2") repo.user_agent = value.toString();
             else if (key == "sub_auto_update") repo.sub_auto_update = value.toInt();
@@ -205,6 +207,7 @@ namespace Configs {
             "max_log_line",
             "stats_tab",
             "sub_auto_update",
+            "app_request_proxy_profile_id",
             "vpn_mtu",
             "ntp_server_port",
             "dns_server_listen_port",
@@ -278,6 +281,7 @@ namespace Configs {
             "domain_strategy",
             "outbound_domain_strategy",
             "simple_dl_url",
+            "app_request_proxy_mode",
             "warp_private_key",
             "warp_public_key",
             "warp_ep",
@@ -438,6 +442,8 @@ namespace Configs {
             {"show_system_dns", show_system_dns},
             {"use_custom_icons", use_custom_icons},
             {"net_use_proxy", net_use_proxy},
+            {"app_request_proxy_mode", app_request_proxy_mode},
+            {"app_request_proxy_profile_id", app_request_proxy_profile_id},
             {"net_insecure", net_insecure},
             {"user_agent2", user_agent},
             {"sub_auto_update", sub_auto_update},

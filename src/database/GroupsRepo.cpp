@@ -7,6 +7,7 @@
 
 #include "include/database/ProfilesRepo.h"
 #include "include/global/Configs.hpp"
+#include "include/global/HTTPRequestHelper.hpp"
 #include "include/ui/mainwindow.h"
 
 
@@ -268,8 +269,13 @@ namespace Configs {
                 Configs::dataManager->settingsRepo->tun_profile_id = -1;
                 settingsChanged = true;
             }
-            if (group->profiles.contains(Configs::dataManager->settingsRepo->system_proxy_profile_id)) {
+            if (group->profiles.contains(Configs::dataManager->settingsRepo->system_proxy_profile_id) &&
+                Configs::dataManager->settingsRepo->app_request_proxy_mode != AppRequestProxyMode::SystemProxyNode) {
                 Configs::dataManager->settingsRepo->system_proxy_profile_id = -1;
+                settingsChanged = true;
+            }
+            if (group->profiles.contains(Configs::dataManager->settingsRepo->app_request_proxy_profile_id)) {
+                Configs::dataManager->settingsRepo->app_request_proxy_profile_id = -1;
                 settingsChanged = true;
             }
             if (settingsChanged) {

@@ -7,6 +7,7 @@
 #include "include/global/Configs.hpp"
 #include "include/global/HTTPRequestHelper.hpp"
 #include "include/global/DeviceDetailsHelper.hpp"
+#include "include/database/ProfilesRepo.h"
 
 #include <QStyleFactory>
 #include <QFileDialog>
@@ -29,11 +30,15 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ADD_ASTERISK(this);
 
     // Common
-    ui->inbound_socks_port_l->setText(tr("System Proxy Port"));
-    ui->random_listen_port->setToolTip(tr("Selects a random available system proxy port on every run."));
-    ui->inbound_user_l->setText(tr("System Proxy Username"));
-    ui->inbound_pass_l->setText(tr("System Proxy Password"));
-    ui->inbound_auth->setText(tr("Enable System Proxy Authorization"));
+    ui->groupBox_system_proxy_mode->setTitle(QStringLiteral("系统代理模式设置"));
+    ui->inbound_socks_port_l->setText(QStringLiteral("系统代理端口"));
+    ui->random_listen_port->setText(QStringLiteral("随机端口"));
+    ui->random_listen_port->setToolTip(QStringLiteral("每次运行时随机选择一个可用的系统代理端口。"));
+    ui->inbound_user_l->setText(QStringLiteral("系统代理用户名"));
+    ui->inbound_pass_l->setText(QStringLiteral("系统代理密码"));
+    ui->inbound_auth->setText(QStringLiteral("启用身份验证"));
+    ui->hide_system_proxy_password->setText(QStringLiteral("隐藏密码"));
+    ui->inbound_pass->setEchoMode(QLineEdit::Normal);
     ui->log_level->addItems(QString("trace debug info warn error fatal panic").split(" "));
     ui->xray_loglevel->addItems(Configs::Xray::XrayLogLevels);
     ui->mux_protocol->addItems({"h2mux", "smux", "yamux"});
@@ -54,7 +59,25 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ui->allow_beta->setChecked(Configs::dataManager->settingsRepo->allow_beta_update);
     D_LOAD_BOOL(inbound_auth)
     D_LOAD_STRING(inbound_user)
-    D_LOAD_STRING(inbound_pass)
+    CACHE.system_proxy_password = Configs::dataManager->settingsRepo->inbound_pass;
+    ui->hide_system_proxy_password->setChecked(true);
+
+    const auto updateSystemProxyPasswordVisibility = [=, this] {
+        if (ui->hide_system_proxy_password->isChecked()) {
+            CACHE.system_proxy_password = ui->inbound_pass->text() == QStringLiteral("******")
+                ? CACHE.system_proxy_password
+                : ui->inbound_pass->text();
+            ui->inbound_pass->setReadOnly(true);
+            ui->inbound_pass->setText(CACHE.system_proxy_password.isEmpty() ? QString() : QStringLiteral("******"));
+        } else {
+            ui->inbound_pass->setReadOnly(false);
+            ui->inbound_pass->setText(CACHE.system_proxy_password);
+        }
+    };
+    connect(ui->hide_system_proxy_password, &QCheckBox::toggled, this, [=, this](bool) {
+        updateSystemProxyPasswordVisibility();
+    });
+    updateSystemProxyPasswordVisibility();
 
     connect(ui->custom_inbound_edit, &QPushButton::clicked, this, [=,this] {
         C_EDIT_JSON_ALLOW_EMPTY(custom_inbound)
@@ -178,7 +201,35 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
 
     ui->user_agent->setText(Configs::dataManager->settingsRepo->user_agent);
     ui->user_agent->setPlaceholderText(Configs::dataManager->settingsRepo->GetUserAgent(true));
-    D_LOAD_BOOL(net_use_proxy)
+    ui->app_request_proxy_mode->addItem(QStringLiteral("直连"), QString::fromLatin1(AppRequestProxyMode::Direct));
+    ui->app_request_proxy_mode->addItem(QStringLiteral("自动"), QString::fromLatin1(AppRequestProxyMode::Auto));
+    ui->app_request_proxy_mode->addItem(QStringLiteral("系统代理节点"), QString::fromLatin1(AppRequestProxyMode::SystemProxyNode));
+    ui->app_request_proxy_mode->addItem(QStringLiteral("指定本地端口节点"), QString::fromLatin1(AppRequestProxyMode::SelectedLocalPortNode));
+    ui->app_request_proxy_profile->addItem(QStringLiteral("未选择"), -1);
+    for (const auto& profile : Configs::dataManager->profilesRepo->GetProfileBatch(Configs::dataManager->profilesRepo->GetAllProfileIds())) {
+        if (profile == nullptr || profile->local_port <= 0) continue;
+        ui->app_request_proxy_profile->addItem(profile->outbound ? profile->outbound->DisplayTypeAndName() : profile->name, profile->id);
+    }
+    QString appRequestProxyMode = Configs::dataManager->settingsRepo->app_request_proxy_mode.trimmed();
+    if (appRequestProxyMode.isEmpty()) {
+        appRequestProxyMode = Configs::dataManager->settingsRepo->net_use_proxy
+            ? QString::fromLatin1(AppRequestProxyMode::Auto)
+            : QString::fromLatin1(AppRequestProxyMode::Direct);
+    }
+    const int appRequestProxyModeIndex = ui->app_request_proxy_mode->findData(appRequestProxyMode);
+    ui->app_request_proxy_mode->setCurrentIndex(appRequestProxyModeIndex >= 0 ? appRequestProxyModeIndex : 0);
+    const int appRequestProxyProfileIndex = ui->app_request_proxy_profile->findData(Configs::dataManager->settingsRepo->app_request_proxy_profile_id);
+    ui->app_request_proxy_profile->setCurrentIndex(appRequestProxyProfileIndex >= 0 ? appRequestProxyProfileIndex : 0);
+    const auto updateAppRequestProxyProfileVisibility = [=, this] {
+        const auto mode = ui->app_request_proxy_mode->currentData().toString();
+        const bool needProfile = mode == AppRequestProxyMode::SelectedLocalPortNode;
+        ui->app_request_proxy_profile_l->setEnabled(needProfile);
+        ui->app_request_proxy_profile->setEnabled(needProfile);
+    };
+    connect(ui->app_request_proxy_mode, &QComboBox::currentIndexChanged, this, [=, this](int) {
+        updateAppRequestProxyProfileVisibility();
+    });
+    updateAppRequestProxyProfileVisibility();
     D_LOAD_BOOL(sub_clear)
     D_LOAD_BOOL(net_insecure)
     D_LOAD_BOOL(sub_send_hwid)
@@ -286,7 +337,9 @@ void DialogBasicSettings::accept() {
     Configs::dataManager->settingsRepo->allow_beta_update = ui->allow_beta->isChecked();
     D_SAVE_BOOL(inbound_auth)
     D_SAVE_STRING(inbound_user)
-    D_SAVE_STRING(inbound_pass)
+    Configs::dataManager->settingsRepo->inbound_pass = ui->hide_system_proxy_password->isChecked()
+        ? CACHE.system_proxy_password
+        : ui->inbound_pass->text();
 
     // Logging
     auto oldMaxLogLines = Configs::dataManager->settingsRepo->max_log_line;
@@ -333,7 +386,27 @@ void DialogBasicSettings::accept() {
     }
 
     Configs::dataManager->settingsRepo->user_agent = ui->user_agent->text();
-    D_SAVE_BOOL(net_use_proxy)
+    const auto selectedAppRequestProxyMode = ui->app_request_proxy_mode->currentData().toString();
+    if (selectedAppRequestProxyMode == AppRequestProxyMode::SystemProxyNode &&
+        Configs::dataManager->settingsRepo->system_proxy_profile_id < 0) {
+        MessageBoxWarning(
+            QStringLiteral("软件内部请求代理"),
+            QStringLiteral("选择“系统代理节点”前，请先在主界面选择一个节点并通过“配置档”菜单或右键菜单执行“设为系统代理节点”。")
+        );
+        return;
+    }
+    if (selectedAppRequestProxyMode == AppRequestProxyMode::SelectedLocalPortNode &&
+        ui->app_request_proxy_profile->currentData().toInt() < 0) {
+        MessageBoxWarning(
+            QStringLiteral("软件内部请求代理"),
+            QStringLiteral("选择“指定本地端口节点”时，必须选择一个已经设置本地端口绑定的节点。")
+        );
+        return;
+    }
+    Configs::dataManager->settingsRepo->app_request_proxy_mode = ui->app_request_proxy_mode->currentData().toString();
+    Configs::dataManager->settingsRepo->app_request_proxy_profile_id = ui->app_request_proxy_profile->currentData().toInt();
+    Configs::dataManager->settingsRepo->net_use_proxy =
+        Configs::dataManager->settingsRepo->app_request_proxy_mode != AppRequestProxyMode::Direct;
     D_SAVE_BOOL(sub_clear)
     D_SAVE_BOOL(net_insecure)
     D_SAVE_BOOL(sub_send_hwid)

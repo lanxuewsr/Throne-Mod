@@ -19,38 +19,119 @@
 
 namespace Configs_network {
     namespace {
-        std::shared_ptr<Configs::Profile> resolvePortBoundProxyProfile() {
-            if (Configs::dataManager->settingsRepo->started_port_bound_mode &&
-                !Configs::dataManager->settingsRepo->started_port_bound_ids.isEmpty()) {
-                auto profile = Configs::dataManager->profilesRepo->GetProfile(
-                    Configs::dataManager->settingsRepo->started_port_bound_ids.first());
-                if (profile != nullptr && profile->local_port > 0) {
-                    return profile;
-                }
+        QString normalizedAppRequestProxyMode() {
+            auto mode = Configs::dataManager->settingsRepo->app_request_proxy_mode.trimmed();
+            if (mode.isEmpty()) {
+                mode = Configs::dataManager->settingsRepo->net_use_proxy
+                    ? QString::fromLatin1(AppRequestProxyMode::Auto)
+                    : QString::fromLatin1(AppRequestProxyMode::Direct);
             }
-            return nullptr;
+            return mode;
         }
 
-        int resolveProxyPort(const std::shared_ptr<Configs::Profile>& portBoundProfile) {
-            if (portBoundProfile != nullptr && portBoundProfile->local_port > 0) {
-                return portBoundProfile->local_port;
-            }
-            return Configs::dataManager->settingsRepo->inbound_socks_port;
+        QString appRequestProxyHost() {
+            return Configs::dataManager->settingsRepo->inbound_address == "::"
+                ? QStringLiteral("127.0.0.1")
+                : Configs::dataManager->settingsRepo->inbound_address;
         }
 
-        void applyProxyAuthentication(QNetworkProxy& proxy, const std::shared_ptr<Configs::Profile>& portBoundProfile) {
-            if (portBoundProfile != nullptr) {
-                if (portBoundProfile->local_auth_enabled) {
-                    proxy.setUser(portBoundProfile->local_auth_user);
-                    proxy.setPassword(portBoundProfile->local_auth_pass);
-                }
+        void applyProfileProxyAuth(AppRequestProxyConfig& config, const std::shared_ptr<Configs::Profile>& profile) {
+            if (profile != nullptr && profile->local_auth_enabled) {
+                config.username = profile->local_auth_user;
+                config.password = profile->local_auth_pass;
+            }
+        }
+
+        void applySystemProxyAuth(AppRequestProxyConfig& config) {
+            if (Configs::dataManager->settingsRepo->inbound_auth) {
+                config.username = Configs::dataManager->settingsRepo->inbound_user;
+                config.password = Configs::dataManager->settingsRepo->inbound_pass;
+            }
+        }
+    }
+
+    AppRequestProxyConfig NetworkRequestHelper::ResolveAppRequestProxy(bool forceProxy) {
+        AppRequestProxyConfig config;
+        const auto mode = normalizedAppRequestProxyMode();
+        if (mode == AppRequestProxyMode::Direct) return config;
+        const bool proxyRequested = forceProxy || mode != AppRequestProxyMode::Direct;
+        if (!proxyRequested) return config;
+
+        if (Configs::dataManager->settingsRepo->started_id < 0 &&
+            !Configs::dataManager->settingsRepo->started_port_bound_mode) {
+            config.error = QObject::tr("Request with proxy but no profile started.");
+            return config;
+        }
+
+        config.host = appRequestProxyHost();
+
+        auto useSystemProxyNode = [&]() {
+            const int id = Configs::dataManager->settingsRepo->system_proxy_profile_id;
+            if (id < 0) {
+                config.error = QObject::tr("App request proxy is set to System Proxy Node, but no System Proxy node is selected.");
                 return;
             }
-            if (Configs::dataManager->settingsRepo->inbound_auth) {
-                proxy.setUser(Configs::dataManager->settingsRepo->inbound_user);
-                proxy.setPassword(Configs::dataManager->settingsRepo->inbound_pass);
+            if (!Configs::dataManager->settingsRepo->spmode_system_proxy) {
+                config.error = QObject::tr("App request proxy is set to System Proxy Node, but System Proxy mode is not enabled.");
+                return;
+            }
+            config.enabled = true;
+            config.port = Configs::dataManager->settingsRepo->inbound_socks_port;
+            applySystemProxyAuth(config);
+        };
+
+        auto useSelectedLocalPortNode = [&]() {
+            const int id = Configs::dataManager->settingsRepo->app_request_proxy_profile_id;
+            auto profile = Configs::dataManager->profilesRepo->GetProfile(id);
+            if (profile == nullptr || profile->local_port <= 0) {
+                config.error = QObject::tr("App request proxy selected node is missing or has no local port binding.");
+                return;
+            }
+            if (!Configs::dataManager->settingsRepo->started_port_bound_mode ||
+                !Configs::dataManager->settingsRepo->started_port_bound_ids.contains(id)) {
+                config.error = QObject::tr("App request proxy selected local port node is not running.");
+                return;
+            }
+            config.enabled = true;
+            config.port = profile->local_port;
+            applyProfileProxyAuth(config, profile);
+        };
+
+        auto useSingleRunningLocalPortNode = [&]() -> bool {
+            if (!Configs::dataManager->settingsRepo->started_port_bound_mode) return false;
+
+            QList<std::shared_ptr<Configs::Profile>> candidates;
+            for (const auto id : Configs::dataManager->settingsRepo->started_port_bound_ids) {
+                auto profile = Configs::dataManager->profilesRepo->GetProfile(id);
+                if (profile != nullptr && profile->local_port > 0) candidates << profile;
+            }
+            if (candidates.size() != 1) return false;
+
+            config.enabled = true;
+            config.port = candidates.first()->local_port;
+            applyProfileProxyAuth(config, candidates.first());
+            return true;
+        };
+
+        if (mode == AppRequestProxyMode::SystemProxyNode) {
+            useSystemProxyNode();
+        } else if (mode == AppRequestProxyMode::SelectedLocalPortNode) {
+            useSelectedLocalPortNode();
+        } else {
+            if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
+                useSystemProxyNode();
+            } else if (!useSingleRunningLocalPortNode()) {
+                if (Configs::dataManager->settingsRepo->started_port_bound_mode) {
+                    config.error = QObject::tr("App request proxy Auto mode found multiple or no running local port bindings. Please select a local port node explicitly.");
+                } else {
+                    config.enabled = true;
+                    config.port = Configs::dataManager->settingsRepo->inbound_socks_port;
+                    applySystemProxyAuth(config);
+                }
             }
         }
+
+        return config;
     }
 
     HTTPResponse NetworkRequestHelper::HttpGet(const QString &url, bool sendHwid, bool useProxy) {
@@ -58,17 +139,17 @@ namespace Configs_network {
         QNetworkAccessManager accessManager;
         accessManager.setTransferTimeout(10000);
         request.setUrl(url);
-        if (Configs::dataManager->settingsRepo->net_use_proxy || Configs::dataManager->settingsRepo->spmode_system_proxy || useProxy) {
-            if (Configs::dataManager->settingsRepo->started_id < 0 &&
-                !Configs::dataManager->settingsRepo->started_port_bound_mode) {
-                return HTTPResponse{QObject::tr("Request with proxy but no profile started.")};
-            }
+        auto proxyConfig = ResolveAppRequestProxy(useProxy);
+        if (!proxyConfig.error.isEmpty()) return HTTPResponse{proxyConfig.error};
+        if (proxyConfig.enabled) {
             QNetworkProxy p;
-            auto portBoundProfile = resolvePortBoundProxyProfile();
             p.setType(QNetworkProxy::HttpProxy);
-            p.setHostName(Configs::dataManager->settingsRepo->inbound_address == "::" ? "127.0.0.1" : Configs::dataManager->settingsRepo->inbound_address);
-            p.setPort(resolveProxyPort(portBoundProfile));
-            applyProxyAuthentication(p, portBoundProfile);
+            p.setHostName(proxyConfig.host);
+            p.setPort(proxyConfig.port);
+            if (!proxyConfig.username.isEmpty() || !proxyConfig.password.isEmpty()) {
+                p.setUser(proxyConfig.username);
+                p.setPassword(proxyConfig.password);
+            }
             accessManager.setProxy(p);
         }
         // Set attribute
@@ -151,17 +232,17 @@ namespace Configs_network {
         QNetworkRequest request;
         QNetworkAccessManager accessManager;
         request.setUrl(url);
-        if (Configs::dataManager->settingsRepo->net_use_proxy || Configs::dataManager->settingsRepo->spmode_system_proxy) {
-            if (Configs::dataManager->settingsRepo->started_id < 0 &&
-                !Configs::dataManager->settingsRepo->started_port_bound_mode) {
-                return QObject::tr("Request with proxy but no profile started.");
-            }
+        auto proxyConfig = ResolveAppRequestProxy();
+        if (!proxyConfig.error.isEmpty()) return proxyConfig.error;
+        if (proxyConfig.enabled) {
             QNetworkProxy p;
-            auto portBoundProfile = resolvePortBoundProxyProfile();
             p.setType(QNetworkProxy::HttpProxy);
-            p.setHostName(Configs::dataManager->settingsRepo->inbound_address == "::" ? "127.0.0.1" : Configs::dataManager->settingsRepo->inbound_address);
-            p.setPort(resolveProxyPort(portBoundProfile));
-            applyProxyAuthentication(p, portBoundProfile);
+            p.setHostName(proxyConfig.host);
+            p.setPort(proxyConfig.port);
+            if (!proxyConfig.username.isEmpty() || !proxyConfig.password.isEmpty()) {
+                p.setUser(proxyConfig.username);
+                p.setPassword(proxyConfig.password);
+            }
             accessManager.setProxy(p);
         }
         if (Configs::dataManager->settingsRepo->net_insecure) {

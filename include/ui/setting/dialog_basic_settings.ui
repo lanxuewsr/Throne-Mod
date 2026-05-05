@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>925</width>
-    <height>472</height>
+    <width>1040</width>
+    <height>520</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -106,32 +106,51 @@ QTabBar::tab:hover:!selected {
             </property>
            </widget>
           </item>
-          <item row="1" column="2" colspan="3">
-           <widget class="QLineEdit" name="inbound_address"/>
+          <item row="1" column="2">
+           <widget class="QLineEdit" name="inbound_address">
+            <property name="maximumSize">
+             <size>
+              <width>150</width>
+              <height>16777215</height>
+             </size>
+            </property>
+           </widget>
           </item>
-          <item row="2" column="2">
+          <item row="1" column="4">
            <widget class="QPushButton" name="custom_inbound_edit">
+            <property name="maximumSize">
+             <size>
+              <width>96</width>
+              <height>16777215</height>
+             </size>
+            </property>
             <property name="text">
              <string>Edit</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
+          <item row="1" column="3">
            <widget class="QLabel" name="label_11">
             <property name="text">
              <string>Custom Inbound</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="1" column="5">
            <widget class="QLabel" name="proxy_scheme_l">
             <property name="text">
              <string>Proxy Format</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="2" colspan="3">
+          <item row="1" column="6">
            <widget class="QComboBox" name="proxy_scheme">
+            <property name="maximumSize">
+             <size>
+              <width>170</width>
+              <height>16777215</height>
+             </size>
+            </property>
             <item>
              <property name="text">
               <string notr="true">{ip}:{port}</string>
@@ -161,7 +180,7 @@ QTabBar::tab:hover:!selected {
           </sizepolicy>
          </property>
          <property name="title">
-          <string>System Proxy Mode Settings</string>
+          <string>系统代理模式设置</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_system_proxy_mode">
           <item row="1" column="1">
@@ -184,6 +203,12 @@ QTabBar::tab:hover:!selected {
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
+            <property name="maximumSize">
+             <size>
+              <width>90</width>
+              <height>16777215</height>
+             </size>
+            </property>
            </widget>
           </item>
           <item row="1" column="3">
@@ -193,6 +218,23 @@ QTabBar::tab:hover:!selected {
             </property>
             <property name="text">
              <string>Random port</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="4">
+           <widget class="QCheckBox" name="inbound_auth">
+            <property name="text">
+             <string>Enable Authorization</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="5">
+           <widget class="QCheckBox" name="hide_system_proxy_password">
+            <property name="text">
+             <string>隐藏密码</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
             </property>
            </widget>
           </item>
@@ -216,13 +258,6 @@ QTabBar::tab:hover:!selected {
             </property>
            </widget>
           </item>
-          <item row="2" column="6">
-           <widget class="QCheckBox" name="inbound_auth">
-            <property name="text">
-             <string>Enable Authorization</string>
-            </property>
-           </widget>
-          </item>
          </layout>
         </widget>
        </item>
@@ -239,14 +274,24 @@ QTabBar::tab:hover:!selected {
          </property>
          <layout class="QGridLayout" name="gridLayout_12">
           <item row="1" column="0">
-           <widget class="QCheckBox" name="net_use_proxy">
-            <property name="toolTip">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use proxy for subscription request, update request etc&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-            </property>
+           <widget class="QLabel" name="app_request_proxy_mode_l">
             <property name="text">
-             <string>Use proxy</string>
+             <string>软件内部请求代理</string>
             </property>
            </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="app_request_proxy_mode"/>
+          </item>
+          <item row="1" column="2">
+           <widget class="QLabel" name="app_request_proxy_profile_l">
+            <property name="text">
+             <string>代理节点</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QComboBox" name="app_request_proxy_profile"/>
           </item>
           <item row="1" column="5">
            <widget class="QCheckBox" name="net_insecure">

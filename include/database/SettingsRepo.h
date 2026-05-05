@@ -105,6 +105,8 @@ namespace Configs {
 
         // Network
         bool net_use_proxy = false;
+        QString app_request_proxy_mode = "";
+        int app_request_proxy_profile_id = -1;
         bool net_insecure = false;
 
         // Subscription

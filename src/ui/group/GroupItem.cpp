@@ -120,6 +120,7 @@ void GroupItem::on_edit_clicked() {
 
 void GroupItem::on_remove_clicked() {
     if (Configs::dataManager->groupsRepo->GetAllGroupIds().size() <= 1) return;
+    if (!GetMainWindow()->confirm_app_request_proxy_system_proxy_release(ent->Profiles())) return;
     if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(ent->name)) ==
         QMessageBox::StandardButton::Yes) {
         GetMainWindow()->profile_stop(false, true, false);

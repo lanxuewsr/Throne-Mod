@@ -100,6 +100,8 @@ public:
 
     void ensure_local_auth_credentials(const std::shared_ptr<Configs::Profile>& profile) const;
 
+    bool confirm_app_request_proxy_system_proxy_release(const QList<int>& profileIds) const;
+
 signals:
 
     void profile_selected(int id);

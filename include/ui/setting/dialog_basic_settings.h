@@ -28,6 +28,7 @@ private:
 
     struct {
         QString custom_inbound;
+        QString system_proxy_password;
         bool needRestart = false;
         bool updateDisableTray = false;
         bool updateTrayIcon = false;

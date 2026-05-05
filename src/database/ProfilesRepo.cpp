@@ -5,6 +5,7 @@
 #include <map>
 
 #include "include/database/GroupsRepo.h"
+#include "include/global/HTTPRequestHelper.hpp"
 #include "include/ui/mainwindow.h"
 
 
@@ -604,8 +605,13 @@ namespace Configs {
             dataManager->settingsRepo->tun_profile_id = -1;
             settingsChanged = true;
         }
-        if (ids.contains(dataManager->settingsRepo->system_proxy_profile_id)) {
+        if (ids.contains(dataManager->settingsRepo->system_proxy_profile_id) &&
+            dataManager->settingsRepo->app_request_proxy_mode != AppRequestProxyMode::SystemProxyNode) {
             dataManager->settingsRepo->system_proxy_profile_id = -1;
+            settingsChanged = true;
+        }
+        if (ids.contains(dataManager->settingsRepo->app_request_proxy_profile_id)) {
+            dataManager->settingsRepo->app_request_proxy_profile_id = -1;
             settingsChanged = true;
         }
         if (settingsChanged) {

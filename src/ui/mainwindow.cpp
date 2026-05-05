@@ -412,16 +412,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     profilesTableModel = new ProfilesTableModel(this);
     ui->profilesTableView->setModel(profilesTableModel);
     ui->profilesTableView->setItemDelegate(new ProfilesTableEditDelegate(ui->profilesTableView));
-    auto *actionSetLocalPort = new QAction(tr("Set Local Port..."), this);
-    auto *actionClearLocalPort = new QAction(tr("Clear Local Port Binding"), this);
-    auto *actionCopyPortBoundConfig = new QAction(tr("Copy Port-Bound Config"), this);
-    auto *actionManageLocalAuth = new QAction(tr("身份认证管理"), this);
+    auto *actionSetLocalPort = new QAction(QStringLiteral("设置本地端口..."), this);
+    auto *actionClearLocalPort = new QAction(QStringLiteral("清除本地端口绑定"), this);
+    auto *actionCopyPortBoundConfig = new QAction(QStringLiteral("复制本地端口绑定配置"), this);
+    auto *actionManageLocalAuth = new QAction(QStringLiteral("身份验证管理"), this);
     auto *actionToggleLocalAuth = new QAction(tr("开启/关闭身份验证"), this);
     auto *actionPreferencesLocalAuth = new QAction(tr("身份验证管理"), this);
-    auto *actionSetTunProfile = new QAction(tr("Set as Tun Mode Node"), this);
-    auto *actionClearTunProfile = new QAction(tr("Clear Tun Mode Node"), this);
-    auto *actionSetSystemProxyProfile = new QAction(tr("Set as System Proxy Node"), this);
-    auto *actionClearSystemProxyProfile = new QAction(tr("Clear System Proxy Node"), this);
+    auto *actionSetTunProfile = new QAction(QStringLiteral("设为 TUN 模式节点"), this);
+    auto *actionClearTunProfile = new QAction(QStringLiteral("清空 TUN 模式节点"), this);
+    auto *actionSetSystemProxyProfile = new QAction(QStringLiteral("设为系统代理节点"), this);
+    auto *actionClearSystemProxyProfile = new QAction(QStringLiteral("清空系统代理节点"), this);
     ui->menu_preferences->insertAction(ui->menu_routing_settings, actionPreferencesLocalAuth);
     ui->menu_server->insertSeparator(ui->menu_export_config);
     ui->menu_server->insertAction(ui->menu_export_config, actionCopyPortBoundConfig);
@@ -2267,6 +2267,7 @@ void  MainWindow::on_menu_delete_repeat_triggered () {
 void MainWindow::on_menu_delete_triggered() {
     auto entIDs = get_now_selected_list();
     if (entIDs.count() == 0) return;
+    if (!confirm_app_request_proxy_system_proxy_release(entIDs)) return;
     if (Configs::dataManager->settingsRepo->skip_delete_confirmation || QMessageBox::question(this, tr("Confirmation"), QString(tr("Remove %1 item(s) ?")).arg(entIDs.count()))==QMessageBox::StandardButton::Yes) {
         Configs::dataManager->profilesRepo->BatchDeleteProfiles(entIDs, true);
         refresh_proxy_list({}, true);
@@ -2861,12 +2862,29 @@ void MainWindow::clear_tun_profile() {
 }
 
 void MainWindow::clear_system_proxy_profile() {
+    if (!confirm_app_request_proxy_system_proxy_release({Configs::dataManager->settingsRepo->system_proxy_profile_id})) return;
     Configs::dataManager->settingsRepo->system_proxy_profile_id = -1;
     Configs::dataManager->settingsRepo->Save();
     if (Configs::dataManager->settingsRepo->spmode_system_proxy) {
         set_spmode_system_proxy(false, false);
     }
     refresh_mode_profile_labels();
+}
+
+bool MainWindow::confirm_app_request_proxy_system_proxy_release(const QList<int>& profileIds) const {
+    const int systemProxyProfileId = Configs::dataManager->settingsRepo->system_proxy_profile_id;
+    if (systemProxyProfileId < 0 ||
+        Configs::dataManager->settingsRepo->app_request_proxy_mode != AppRequestProxyMode::SystemProxyNode ||
+        !profileIds.contains(systemProxyProfileId)) {
+        return true;
+    }
+
+    MessageBoxWarning(
+        QStringLiteral("无法清空系统代理节点"),
+        QStringLiteral("当前系统代理节点正在被“软件内部请求代理”的“系统代理节点”模式占用，不能清空或删除。\n\n"
+                       "请先进入“设置” -> “基本设置” -> “网络设置”，把“软件内部请求代理”改为“直连”“自动”或“指定本地端口节点”，保存后再执行当前操作。")
+    );
+    return false;
 }
 
 void MainWindow::refresh_mode_profile_labels() {
@@ -2908,8 +2926,8 @@ void MainWindow::prompt_set_local_port_binding() {
     const int currentPort = profile->local_port > 0 ? profile->local_port : Configs::dataManager->settingsRepo->inbound_socks_port;
     const int newPort = QInputDialog::getInt(
         this,
-        tr("Set Local Port"),
-        tr("Choose the local listening port for %1").arg(profile->outbound->DisplayTypeAndName()),
+        QStringLiteral("设置本地端口"),
+        QStringLiteral("为 %1 选择本地监听端口").arg(profile->outbound->DisplayTypeAndName()),
         currentPort,
         1,
         65535,
@@ -2921,8 +2939,8 @@ void MainWindow::prompt_set_local_port_binding() {
     auto conflict = find_port_binding_conflict(newPort, profile->id);
     if (conflict != nullptr) {
         MessageBoxWarning(
-            tr("Port Conflict"),
-            tr("Port %1 is already bound to %2. Please clear that binding first.")
+            QStringLiteral("端口冲突"),
+            QStringLiteral("端口 %1 已绑定到 %2，请先清除该绑定。")
                 .arg(newPort)
                 .arg(conflict->outbound->DisplayTypeAndName())
         );
@@ -3039,17 +3057,23 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     dialog.resize(860, 520);
 
     auto *layout = new QVBoxLayout(&dialog);
-    auto *hint = new QLabel(tr("Manage authentication for local port mappings. Enable rows require both username and password."), &dialog);
+    auto *hint = new QLabel(QStringLiteral("管理本地端口映射的身份验证。启用身份验证的节点必须同时填写用户名和密码。"), &dialog);
     hint->setWordWrap(true);
     layout->addWidget(hint);
 
+    auto *filterLayout = new QHBoxLayout();
     auto *hideUnselected = new QCheckBox(QStringLiteral("隐藏未选中节点"), &dialog);
     hideUnselected->setChecked(hasExplicitSelection);
     hideUnselected->setEnabled(hasExplicitSelection);
-    layout->addWidget(hideUnselected);
+    auto *hidePasswords = new QCheckBox(QStringLiteral("隐藏密码"), &dialog);
+    hidePasswords->setChecked(true);
+    filterLayout->addWidget(hideUnselected);
+    filterLayout->addWidget(hidePasswords);
+    filterLayout->addStretch();
+    layout->addLayout(filterLayout);
 
     auto *table = new QTableWidget(0, 5, &dialog);
-    table->setHorizontalHeaderLabels({tr("Profile"), tr("Local Port"), QStringLiteral("身份验证"), tr("Username"), tr("Password")});
+    table->setHorizontalHeaderLabels({QStringLiteral("节点"), QStringLiteral("本地端口"), QStringLiteral("身份验证"), QStringLiteral("用户名"), QStringLiteral("密码")});
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     table->verticalHeader()->setVisible(false);
@@ -3059,7 +3083,13 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
 
-    const auto appendProfileRow = [table](const std::shared_ptr<Configs::Profile>& profile) {
+    const auto setPasswordDisplay = [](QTableWidgetItem *item, const QString& password, bool hide) {
+        if (item == nullptr) return;
+        item->setData(Qt::UserRole, password);
+        item->setText(hide && !password.isEmpty() ? QStringLiteral("******") : password);
+    };
+
+    const auto appendProfileRow = [table, hidePasswords, setPasswordDisplay](const std::shared_ptr<Configs::Profile>& profile) {
         if (profile == nullptr) return;
         const int row = table->rowCount();
         table->insertRow(row);
@@ -3078,7 +3108,9 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
         table->setItem(row, 2, enabledItem);
 
         table->setItem(row, 3, new QTableWidgetItem(profile->local_auth_user));
-        table->setItem(row, 4, new QTableWidgetItem(profile->local_auth_pass));
+        auto *passItem = new QTableWidgetItem();
+        setPasswordDisplay(passItem, profile->local_auth_pass, hidePasswords->isChecked());
+        table->setItem(row, 4, passItem);
     };
     const auto reloadRows = [=, &profileById]() {
         table->setRowCount(0);
@@ -3098,18 +3130,25 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     reloadRows();
     layout->addWidget(table);
 
+    connect(table, &QTableWidget::itemChanged, &dialog, [=](QTableWidgetItem *item) {
+        if (item == nullptr || item->column() != 4) return;
+        if (hidePasswords->isChecked() && item->text() == QStringLiteral("******")) return;
+        item->setData(Qt::UserRole, item->text());
+        if (hidePasswords->isChecked()) item->setText(QStringLiteral("******"));
+    });
+
     auto *batchLayout = new QFormLayout();
     auto *batchUser = new QLineEdit(&dialog);
     auto *batchPass = new QLineEdit(&dialog);
     batchPass->setEchoMode(QLineEdit::Password);
-    batchLayout->addRow(tr("Username"), batchUser);
-    batchLayout->addRow(tr("Password"), batchPass);
+    batchLayout->addRow(QStringLiteral("用户名"), batchUser);
+    batchLayout->addRow(QStringLiteral("密码"), batchPass);
     layout->addLayout(batchLayout);
 
     auto *buttonLayout = new QHBoxLayout();
-    auto *enableSelected = new QPushButton(tr("Enable Selected"), &dialog);
-    auto *disableSelected = new QPushButton(tr("Disable Selected"), &dialog);
-    auto *applyCredentials = new QPushButton(tr("Apply Credentials to Selected"), &dialog);
+    auto *enableSelected = new QPushButton(QStringLiteral("启用选中项"), &dialog);
+    auto *disableSelected = new QPushButton(QStringLiteral("禁用选中项"), &dialog);
+    auto *applyCredentials = new QPushButton(QStringLiteral("应用凭据到选中项"), &dialog);
     buttonLayout->addWidget(enableSelected);
     buttonLayout->addWidget(disableSelected);
     buttonLayout->addWidget(applyCredentials);
@@ -3146,11 +3185,19 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     connect(applyCredentials, &QPushButton::clicked, &dialog, [=] {
         for (int row : rowsOrAll()) {
             if (auto *userItem = table->item(row, 3)) userItem->setText(batchUser->text().trimmed());
-            if (auto *passItem = table->item(row, 4)) passItem->setText(batchPass->text());
+            if (auto *passItem = table->item(row, 4)) setPasswordDisplay(passItem, batchPass->text(), hidePasswords->isChecked());
         }
     });
     connect(hideUnselected, &QCheckBox::toggled, &dialog, [=, &reloadRows](bool) {
         reloadRows();
+    });
+    connect(hidePasswords, &QCheckBox::toggled, &dialog, [=](bool hide) {
+        for (int row = 0; row < table->rowCount(); ++row) {
+            if (auto *passItem = table->item(row, 4)) {
+                setPasswordDisplay(passItem, passItem->data(Qt::UserRole).toString(), hide);
+            }
+        }
+        batchPass->setEchoMode(hide ? QLineEdit::Password : QLineEdit::Normal);
     });
 
     auto *dialogButtons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
@@ -3162,7 +3209,7 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
             const auto user = table->item(row, 3) != nullptr ? table->item(row, 3)->text().trimmed() : QString();
             const auto pass = table->item(row, 4) != nullptr ? table->item(row, 4)->text() : QString();
             if (enabled && (user.isEmpty() || pass.isEmpty())) {
-                MessageBoxWarning(tr("身份验证管理"), tr("Enabled authentication requires both username and password."));
+                MessageBoxWarning(tr("身份验证管理"), QStringLiteral("启用身份验证时必须同时填写用户名和密码。"));
                 return;
             }
         }
@@ -3182,7 +3229,7 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
 
         profile->local_auth_enabled = table->item(row, 2) != nullptr && table->item(row, 2)->checkState() == Qt::Checked;
         profile->local_auth_user = table->item(row, 3) != nullptr ? table->item(row, 3)->text().trimmed() : QString();
-        profile->local_auth_pass = table->item(row, 4) != nullptr ? table->item(row, 4)->text() : QString();
+        profile->local_auth_pass = table->item(row, 4) != nullptr ? table->item(row, 4)->data(Qt::UserRole).toString() : QString();
         changedProfiles << profile;
         changedIds << profile->id;
     }
@@ -3195,7 +3242,7 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
         const auto shouldRestart = QMessageBox::question(
             this,
             tr("身份验证管理"),
-            tr("Authentication changes affect the running local port configuration. Restart it now?")
+            QStringLiteral("身份验证修改会影响正在运行的本地端口配置。是否立即重启？")
         );
         if (shouldRestart == QMessageBox::Yes) {
             start_port_bound_profiles();
@@ -3318,6 +3365,7 @@ void MainWindow::clearUnavailableProfiles(bool confirm, QList<int> profileIDs) {
     }
 
     auto clearFunc = [&, this] {
+        if (!confirm_app_request_proxy_system_proxy_release(del_ids)) return;
         Configs::dataManager->profilesRepo->BatchDeleteProfiles(del_ids);
         refresh_proxy_list({}, true);
     };
@@ -3490,12 +3538,13 @@ void MainWindow::on_tabWidget_customContextMenuRequested(const QPoint &p) {
     connect(deleteAction, &QAction::triggered, this, [=,this] {
         auto id = clickedGroupId;
         if (id == ALL_GROUP_TAB_ID) return;
+        auto group = Configs::dataManager->groupsRepo->GetGroup(id);
+        if (group != nullptr && !confirm_app_request_proxy_system_proxy_release(group->Profiles())) return;
         if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(Configs::dataManager->groupsRepo->GetGroup(id)->name)) ==
             QMessageBox::StandardButton::Yes) {
             if (running != nullptr) {
                 if (running->gid == id) profile_stop(false, true, false);
             } else if (running_port_bound_mode) {
-                auto group = Configs::dataManager->groupsRepo->GetGroup(id);
                 if (group != nullptr) {
                     for (const auto profileId : group->Profiles()) {
                         if (running_port_bound_profile_ids.contains(profileId)) {

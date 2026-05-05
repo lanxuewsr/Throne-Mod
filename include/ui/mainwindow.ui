@@ -899,7 +899,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_add_from_input">
    <property name="text">
-    <string>New profile</string>
+    <string>新建配置档</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+N</string>
@@ -907,12 +907,12 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_manage_groups">
    <property name="text">
-    <string>Groups</string>
+    <string>分组</string>
    </property>
   </action>
   <action name="menu_start">
    <property name="text">
-    <string>Start</string>
+    <string>启动</string>
    </property>
    <property name="shortcut">
     <string notr="true">Return</string>
@@ -920,7 +920,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_stop">
    <property name="text">
-    <string>Stop</string>
+    <string>停止</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+S</string>
@@ -928,12 +928,12 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_routing_settings">
    <property name="text">
-    <string>Routing Settings</string>
+    <string>路由设置</string>
    </property>
   </action>
   <action name="menu_add_from_clipboard">
    <property name="text">
-    <string>Add profile from clipboard</string>
+    <string>从剪贴板添加配置档</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+V</string>
@@ -941,7 +941,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_delete">
    <property name="text">
-    <string>Delete</string>
+    <string>删除</string>
    </property>
    <property name="shortcut">
     <string notr="true">Del</string>
@@ -949,17 +949,17 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_add_from_clipboard2">
    <property name="text">
-    <string>Add profile from clipboard</string>
+    <string>从剪贴板添加配置档</string>
    </property>
   </action>
   <action name="menu_profile_debug_info">
    <property name="text">
-    <string>Debug Info</string>
+    <string>调试信息</string>
    </property>
   </action>
   <action name="menu_qr">
    <property name="text">
-    <string>QR Code and link</string>
+    <string>二维码和链接</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Q</string>
@@ -967,7 +967,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_copy_link">
    <property name="text">
-    <string>Copy Link</string>
+    <string>复制链接</string>
    </property>
   </action>
   <action name="menu_tcp_ping">
@@ -988,7 +988,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_clear_test_result">
    <property name="text">
-    <string>Clear Test Result</string>
+    <string>清除测试结果</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+C</string>
@@ -996,7 +996,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_export_config">
    <property name="text">
-    <string>Export Sing-box config</string>
+    <string>导出 Sing-box 配置</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+E</string>
@@ -1004,7 +1004,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_reset_traffic">
    <property name="text">
-    <string>Reset Traffic</string>
+    <string>重置流量</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+R</string>
@@ -1012,7 +1012,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_scan_qr">
    <property name="text">
-    <string>Scan QR Code</string>
+    <string>扫描二维码</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+Q</string>
@@ -1023,7 +1023,7 @@ QTabBar::tab:hover:!selected {
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Enable System Proxy</string>
+    <string>启用系统代理</string>
    </property>
   </action>
   <action name="menu_spmode_disabled">
@@ -1031,12 +1031,12 @@ QTabBar::tab:hover:!selected {
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Disable</string>
+    <string>禁用</string>
    </property>
   </action>
   <action name="menu_delete_repeat">
    <property name="text">
-    <string>Remove Duplicates</string>
+    <string>删除重复项</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+D</string>
@@ -1052,7 +1052,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_move">
    <property name="text">
-    <string>Move</string>
+    <string>移动</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+M</string>
@@ -1063,7 +1063,7 @@ QTabBar::tab:hover:!selected {
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Start with system</string>
+    <string>开机启动</string>
    </property>
   </action>
   <action name="actionRemember_last_proxy">
@@ -1071,7 +1071,7 @@ QTabBar::tab:hover:!selected {
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Remember last profile</string>
+    <string>记住上次配置档</string>
    </property>
   </action>
   <action name="actionAllow_LAN">
@@ -1079,12 +1079,12 @@ QTabBar::tab:hover:!selected {
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Allow other devices to connect</string>
+    <string>允许其他设备连接</string>
    </property>
   </action>
   <action name="menu_remove_unavailable">
    <property name="text">
-    <string>Remove Unavailable</string>
+    <string>删除不可用节点</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+R</string>
@@ -1092,7 +1092,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_full_test">
    <property name="text">
-    <string>Full Test</string>
+    <string>完整测试</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+F</string>
@@ -1100,12 +1100,12 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_hotkey_settings">
    <property name="text">
-    <string>Hotkey Settings</string>
+    <string>快捷键设置</string>
    </property>
   </action>
   <action name="menu_select_all">
    <property name="text">
-    <string>Select All</string>
+    <string>全选</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+A</string>
@@ -1113,7 +1113,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_copy_links_nkr">
    <property name="text">
-    <string>Copy links of selected (Json Links)</string>
+    <string>复制选中项链接（Json Links）</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Alt+C</string>
@@ -1137,7 +1137,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_copy_links">
    <property name="text">
-    <string>Copy links of selected</string>
+    <string>复制选中项链接</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+C</string>
@@ -1148,12 +1148,12 @@ QTabBar::tab:hover:!selected {
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Enable Tun</string>
+    <string>启用 TUN</string>
    </property>
   </action>
   <action name="menu_clone">
    <property name="text">
-    <string>Clone</string>
+    <string>克隆</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+D</string>
@@ -1161,7 +1161,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_update_subscription">
    <property name="text">
-    <string>Update subscription</string>
+    <string>更新订阅</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+U</string>
@@ -1172,7 +1172,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_resolve_domain">
    <property name="text">
-    <string>Resolve domain</string>
+    <string>解析域名</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+I</string>
@@ -1180,17 +1180,17 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_vpn_settings">
    <property name="text">
-    <string>Tun Settings</string>
+    <string>TUN 设置</string>
    </property>
   </action>
   <action name="actionRestart_Program">
    <property name="text">
-    <string>Restart Program</string>
+    <string>重启程序</string>
    </property>
   </action>
   <action name="menu_open_config_folder">
    <property name="text">
-    <string>Open Config Folder</string>
+    <string>打开配置目录</string>
    </property>
   </action>
   <action name="actionfake_4">
@@ -1211,12 +1211,12 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="actionRestart_Proxy">
    <property name="text">
-    <string>Restart Core</string>
+    <string>重启核心</string>
    </property>
   </action>
   <action name="menu_stop_testing">
    <property name="text">
-    <string>Stop Testing</string>
+    <string>停止测试</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+.</string>
@@ -1224,7 +1224,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="actionUrl_Test_Selected">
    <property name="text">
-    <string>Url Test Selected</string>
+    <string>URL 测试选中项</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+S</string>
@@ -1238,7 +1238,7 @@ QTabBar::tab:hover:!selected {
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Url Test Group</string>
+    <string>URL 测试当前分组</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+G</string>
@@ -1249,7 +1249,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_resolve_selected">
    <property name="text">
-    <string>Resolve Selected Domain</string>
+    <string>解析选中项域名</string>
    </property>
    <property name="visible">
     <bool>true</bool>
@@ -1257,7 +1257,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_remove_invalid">
    <property name="text">
-    <string>Remove Invalid</string>
+    <string>删除无效节点</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Alt+I</string>
@@ -1268,12 +1268,12 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="menu_open_routing_manager">
    <property name="text">
-    <string>Open Manager</string>
+    <string>打开管理器</string>
    </property>
   </action>
   <action name="actionSpeedtest_Current">
    <property name="text">
-    <string>Speedtest Current</string>
+    <string>测速当前节点</string>
    </property>
    <property name="shortcut">
     <string notr="true">F6</string>
@@ -1281,7 +1281,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="actionSpeedtest_Selected">
    <property name="text">
-    <string>Speedtest Selected</string>
+    <string>测速选中项</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Shift+P</string>
@@ -1289,7 +1289,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="actionSpeedtest_Group">
    <property name="text">
-    <string>Speedtest Group</string>
+    <string>测速当前分组</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Alt+P</string>
@@ -1297,7 +1297,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="actionHide_window">
    <property name="text">
-    <string>Hide window</string>
+    <string>隐藏窗口</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+H</string>
@@ -1305,7 +1305,7 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="actionAdd_profile_from_File">
    <property name="text">
-    <string>Add profile from File</string>
+    <string>从文件添加配置档</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+O</string>
@@ -1313,32 +1313,32 @@ QTabBar::tab:hover:!selected {
   </action>
   <action name="actionResolve_Out_IP">
    <property name="text">
-    <string>Resolve Out IP</string>
+    <string>解析出口 IP</string>
    </property>
   </action>
   <action name="actionResolve_Selected_Out_IP">
    <property name="text">
-    <string>Resolve Selected Out IP</string>
+    <string>解析选中项出口 IP</string>
    </property>
   </action>
   <action name="actionRefresh_Column_Widths">
    <property name="text">
-    <string>Refresh Column Widths</string>
+    <string>刷新列宽</string>
    </property>
   </action>
   <action name="actionExport_Xray_config">
    <property name="text">
-    <string>Export Xray config</string>
+    <string>导出 Xray 配置</string>
    </property>
   </action>
   <action name="actionCopy_Test_Result">
    <property name="text">
-    <string>Copy Test Result</string>
+    <string>复制测试结果</string>
    </property>
   </action>
   <action name="actionClear_Test_Result">
    <property name="text">
-    <string>Clear Test Result</string>
+    <string>清除测试结果</string>
    </property>
   </action>
  </widget>
