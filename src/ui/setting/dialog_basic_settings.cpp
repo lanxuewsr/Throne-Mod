@@ -60,6 +60,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     D_LOAD_BOOL(inbound_auth)
     D_LOAD_STRING(inbound_user)
     CACHE.system_proxy_password = Configs::dataManager->settingsRepo->inbound_pass;
+    ui->inbound_pass->setText(CACHE.system_proxy_password);
     ui->hide_system_proxy_password->setChecked(true);
 
     const auto updateSystemProxyPasswordVisibility = [=, this] {
