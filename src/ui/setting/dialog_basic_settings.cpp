@@ -67,8 +67,10 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ADD_ASTERISK(this);
 
     // Common
-    tightenSettingsLayout(ui->tab_1->layout());
-    alignSettingLabels(ui->tab_1);
+    for (int i = 0; i < ui->tabWidget->count(); ++i) {
+        tightenSettingsLayout(ui->tabWidget->widget(i)->layout());
+    }
+    alignSettingLabels(ui->tabWidget);
     ui->inbound_user->setMaximumWidth(180);
     ui->inbound_pass->setMaximumWidth(180);
     ui->app_request_proxy_mode->setMaximumWidth(180);
