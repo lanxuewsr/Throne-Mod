@@ -15,6 +15,10 @@
 #include <QMessageBox>
 #include <QTimer>
 #include <QBrush>
+#include <QFormLayout>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QRegularExpression>
 #include <QTextBlock>
 #include <QTextCursor>
@@ -24,12 +28,52 @@
 
 #include "include/ui/mainwindow.h"
 
+namespace {
+void tightenSettingsLayout(QLayout *layout) {
+    if (layout == nullptr) return;
+
+    layout->setSpacing(6);
+    if (auto *grid = qobject_cast<QGridLayout *>(layout)) {
+        grid->setHorizontalSpacing(6);
+        grid->setVerticalSpacing(4);
+    } else if (auto *form = qobject_cast<QFormLayout *>(layout)) {
+        form->setHorizontalSpacing(6);
+        form->setVerticalSpacing(4);
+    } else if (auto *box = qobject_cast<QBoxLayout *>(layout)) {
+        box->setSpacing(6);
+    }
+
+    for (int i = 0; i < layout->count(); ++i) {
+        auto *item = layout->itemAt(i);
+        if (item != nullptr) tightenSettingsLayout(item->layout());
+    }
+}
+
+void alignSettingLabels(QWidget *root) {
+    if (root == nullptr) return;
+
+    for (auto *label : root->findChildren<QLabel *>()) {
+        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        auto policy = label->sizePolicy();
+        policy.setHorizontalPolicy(QSizePolicy::Maximum);
+        label->setSizePolicy(policy);
+    }
+}
+}
+
 DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     : QDialog(parent), ui(new Ui::DialogBasicSettings) {
     ui->setupUi(this);
     ADD_ASTERISK(this);
 
     // Common
+    tightenSettingsLayout(ui->tab_1->layout());
+    alignSettingLabels(ui->tab_1);
+    ui->inbound_user->setMaximumWidth(180);
+    ui->inbound_pass->setMaximumWidth(180);
+    ui->app_request_proxy_mode->setMaximumWidth(180);
+    ui->app_request_proxy_profile->setMinimumWidth(260);
+    ui->app_request_proxy_profile->setMaximumWidth(360);
     ui->groupBox_system_proxy_mode->setTitle(QStringLiteral("系统代理模式设置"));
     ui->inbound_socks_port_l->setText(QStringLiteral("系统代理端口"));
     ui->random_listen_port->setText(QStringLiteral("随机端口"));

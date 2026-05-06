@@ -3054,7 +3054,7 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
 
     QDialog dialog(this);
     dialog.setWindowTitle(tr("身份验证管理"));
-    dialog.resize(860, 520);
+    dialog.resize(1060, 560);
 
     auto *layout = new QVBoxLayout(&dialog);
     auto *hint = new QLabel(QStringLiteral("管理本地端口映射的身份验证。启用身份验证的节点必须同时填写用户名和密码。"), &dialog);
@@ -3077,11 +3077,35 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     table->verticalHeader()->setVisible(false);
-    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setStretchLastSection(false);
+    table->horizontalHeader()->setMinimumSectionSize(64);
+    for (int column = 0; column < table->columnCount(); ++column) {
+        table->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Interactive);
+    }
+    table->setColumnWidth(0, 280);
+    table->setColumnWidth(1, 86);
+    table->setColumnWidth(2, 92);
+    table->setColumnWidth(3, 180);
+    table->setColumnWidth(4, 360);
+
+    bool adjustingAuthColumnWidths = false;
+    const auto enforceAuthColumnWidths = [table, &adjustingAuthColumnWidths] {
+        if (adjustingAuthColumnWidths) return;
+        adjustingAuthColumnWidths = true;
+        const int minimums[] = {220, 78, 88, 140, 180};
+        const int availableWidth = qMax(table->viewport()->width(), 820);
+        const int maxPasswordWidth = qMax(360, availableWidth - 220 - 78 - 88 - 140 - 24);
+        for (int column = 0; column < table->columnCount(); ++column) {
+            const int minimumWidth = minimums[column];
+            int width = qMax(table->columnWidth(column), minimumWidth);
+            if (column == 4) width = qMin(width, maxPasswordWidth);
+            table->setColumnWidth(column, width);
+        }
+        adjustingAuthColumnWidths = false;
+    };
+    connect(table->horizontalHeader(), &QHeaderView::sectionResized, &dialog, [=, &enforceAuthColumnWidths](int, int, int) {
+        enforceAuthColumnWidths();
+    });
 
     const auto setPasswordDisplay = [](QTableWidgetItem *item, const QString& password, bool hide) {
         if (item == nullptr) return;
@@ -3128,6 +3152,12 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
         }
     };
     reloadRows();
+    table->resizeColumnToContents(0);
+    table->resizeColumnToContents(1);
+    table->resizeColumnToContents(2);
+    table->setColumnWidth(3, 180);
+    table->setColumnWidth(4, 360);
+    enforceAuthColumnWidths();
     layout->addWidget(table);
 
     connect(table, &QTableWidget::itemChanged, &dialog, [=](QTableWidgetItem *item) {
@@ -3190,6 +3220,7 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
     });
     connect(hideUnselected, &QCheckBox::toggled, &dialog, [=, &reloadRows](bool) {
         reloadRows();
+        enforceAuthColumnWidths();
     });
     connect(hidePasswords, &QCheckBox::toggled, &dialog, [=](bool hide) {
         for (int row = 0; row < table->rowCount(); ++row) {
@@ -3197,6 +3228,8 @@ void MainWindow::show_local_auth_management(const QList<int>& profileIds) {
                 setPasswordDisplay(passItem, passItem->data(Qt::UserRole).toString(), hide);
             }
         }
+        table->resizeColumnToContents(4);
+        enforceAuthColumnWidths();
         batchPass->setEchoMode(hide ? QLineEdit::Password : QLineEdit::Normal);
     });
 
