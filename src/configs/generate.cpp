@@ -24,6 +24,18 @@ namespace Configs {
         return tun_name;
     }
 
+    QJsonObject buildTunQuicRejectRule() {
+        // Browsers prefer QUIC/HTTP3 over UDP/443. Many proxy nodes either do not
+        // relay it reliably or stall it, so reject it early and let browsers fall
+        // back to normal TCP HTTPS.
+        return QJsonObject{
+            {"action", "reject"},
+            {"inbound", "tun-in"},
+            {"network", "udp"},
+            {"port", QJsonArray{443}},
+        };
+    }
+
     void MergeJson(const QJsonObject &custom, QJsonObject &outbound) {
         if (custom.isEmpty()) return;
         for (const auto &key: custom.keys()) {
@@ -902,6 +914,9 @@ namespace Configs {
 
         // rules
         auto routeRules = routeChain->get_route_rules(false, routeDeps->outboundMap);
+        if (ctx->tunEnabled) {
+            routeRules.prepend(buildTunQuicRejectRule());
+        }
         routeRules.prepend(QJsonObject{
             {"action", "route"},
             {"process_path", FindCoreRealPath()},
@@ -1539,6 +1554,9 @@ namespace Configs {
                     {"inbound", resolveInbounds}
                 };
             }
+        }
+        if (ctx->tunEnabled) {
+            routeRules << buildTunQuicRejectRule();
         }
         routeRules << QJsonObject{
             {"inbound", "dns-in"},
