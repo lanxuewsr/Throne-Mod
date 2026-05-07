@@ -38,25 +38,17 @@ namespace Configs {
         };
     }
 
-    QJsonObject buildTunDnsPortHijackRule(const QString& network) {
-        // Match by port before DNS sniffing so TUN traffic to external resolvers
-        // cannot bypass the internal DNS chain.
+    QJsonObject buildTunExternalDnsFallbackRule() {
+        // Valid DNS packets are hijacked by the earlier protocol=dns rule. Some
+        // security apps use DNS ports for custom probes; keep those out of proxy
+        // outbounds without forcing sing-box to parse them as DNS.
         return QJsonObject{
-            {"action", "hijack-dns"},
+            {"action", "route"},
             {"inbound", "tun-in"},
-            {"network", network},
+            {"network", QJsonArray{QStringLiteral("udp"), QStringLiteral("tcp")}},
             {"port", QJsonArray{53, 1053}},
+            {"outbound", "direct"},
         };
-    }
-
-    void appendTunDnsPortHijackRules(QJsonArray& rules) {
-        rules << buildTunDnsPortHijackRule("udp");
-        rules << buildTunDnsPortHijackRule("tcp");
-    }
-
-    void prependTunDnsPortHijackRules(QJsonArray& rules) {
-        rules.prepend(buildTunDnsPortHijackRule("tcp"));
-        rules.prepend(buildTunDnsPortHijackRule("udp"));
     }
 
     void MergeJson(const QJsonObject &custom, QJsonObject &outbound) {
@@ -939,7 +931,6 @@ namespace Configs {
         auto routeRules = routeChain->get_route_rules(false, routeDeps->outboundMap);
         if (ctx->tunEnabled) {
             routeRules.prepend(buildTunQuicRejectRule());
-            prependTunDnsPortHijackRules(routeRules);
         }
         routeRules.prepend(QJsonObject{
             {"action", "route"},
@@ -1547,7 +1538,6 @@ namespace Configs {
 
         QJsonArray routeRules;
         if (ctx->tunEnabled) {
-            appendTunDnsPortHijackRules(routeRules);
             routeRules << buildTunQuicRejectRule();
         }
         if (Configs::dataManager->settingsRepo->sniffing_mode != SniffingMode::DISABLE) {
@@ -1570,6 +1560,9 @@ namespace Configs {
                 {"protocol", "dns"},
                 {"inbound", dnsHijackInbounds}
             };
+        }
+        if (ctx->tunEnabled) {
+            routeRules << buildTunExternalDnsFallbackRule();
         }
         if (!Configs::dataManager->settingsRepo->resolve_domain_strategy.isEmpty()) {
             QJsonArray resolveInbounds;
