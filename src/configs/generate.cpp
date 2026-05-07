@@ -26,10 +26,12 @@ namespace Configs {
 
     QJsonObject buildTunQuicRejectRule() {
         // Browsers prefer QUIC/HTTP3 over UDP/443. Many proxy nodes either do not
-        // relay it reliably or stall it, so reject it early and let browsers fall
-        // back to normal TCP HTTPS.
+        // relay it reliably or stall it. Keep replying with ICMP port unreachable
+        // instead of dropping flooded retries, so browsers fall back to TCP HTTPS.
         return QJsonObject{
             {"action", "reject"},
+            {"method", "default"},
+            {"no_drop", true},
             {"inbound", "tun-in"},
             {"network", "udp"},
             {"port", QJsonArray{443}},
@@ -1522,6 +1524,9 @@ namespace Configs {
         }
 
         QJsonArray routeRules;
+        if (ctx->tunEnabled) {
+            routeRules << buildTunQuicRejectRule();
+        }
         if (Configs::dataManager->settingsRepo->sniffing_mode != SniffingMode::DISABLE) {
             QJsonArray sniffInbounds;
             if (Configs::dataManager->settingsRepo->spmode_system_proxy) sniffInbounds << "mixed-in";
@@ -1554,9 +1559,6 @@ namespace Configs {
                     {"inbound", resolveInbounds}
                 };
             }
-        }
-        if (ctx->tunEnabled) {
-            routeRules << buildTunQuicRejectRule();
         }
         routeRules << QJsonObject{
             {"inbound", "dns-in"},
