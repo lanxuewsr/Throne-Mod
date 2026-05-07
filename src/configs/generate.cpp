@@ -38,6 +38,27 @@ namespace Configs {
         };
     }
 
+    QJsonObject buildTunDnsPortHijackRule(const QString& network) {
+        // Match by port before DNS sniffing so TUN traffic to external resolvers
+        // cannot bypass the internal DNS chain.
+        return QJsonObject{
+            {"action", "hijack-dns"},
+            {"inbound", "tun-in"},
+            {"network", network},
+            {"port", QJsonArray{53, 1053}},
+        };
+    }
+
+    void appendTunDnsPortHijackRules(QJsonArray& rules) {
+        rules << buildTunDnsPortHijackRule("udp");
+        rules << buildTunDnsPortHijackRule("tcp");
+    }
+
+    void prependTunDnsPortHijackRules(QJsonArray& rules) {
+        rules.prepend(buildTunDnsPortHijackRule("tcp"));
+        rules.prepend(buildTunDnsPortHijackRule("udp"));
+    }
+
     void MergeJson(const QJsonObject &custom, QJsonObject &outbound) {
         if (custom.isEmpty()) return;
         for (const auto &key: custom.keys()) {
@@ -918,6 +939,7 @@ namespace Configs {
         auto routeRules = routeChain->get_route_rules(false, routeDeps->outboundMap);
         if (ctx->tunEnabled) {
             routeRules.prepend(buildTunQuicRejectRule());
+            prependTunDnsPortHijackRules(routeRules);
         }
         routeRules.prepend(QJsonObject{
             {"action", "route"},
@@ -1525,6 +1547,7 @@ namespace Configs {
 
         QJsonArray routeRules;
         if (ctx->tunEnabled) {
+            appendTunDnsPortHijackRules(routeRules);
             routeRules << buildTunQuicRejectRule();
         }
         if (Configs::dataManager->settingsRepo->sniffing_mode != SniffingMode::DISABLE) {
