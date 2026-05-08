@@ -863,6 +863,13 @@ void MainWindow::start_port_bound_profiles(const QList<int>& profileIds) {
 #endif
 
     auto profiles = get_port_bound_profiles(profileIds);
+    if (!Configs::dataManager->settingsRepo->spmode_vpn &&
+        !Configs::dataManager->settingsRepo->need_keep_vpn_off &&
+        Configs::dataManager->settingsRepo->tun_profile_id >= 0 &&
+        running_port_bound_mode &&
+        running_port_bound_profile_ids.contains(Configs::dataManager->settingsRepo->tun_profile_id)) {
+        Configs::dataManager->settingsRepo->spmode_vpn = true;
+    }
     const int tunProfileId = Configs::dataManager->settingsRepo->spmode_vpn
         ? Configs::dataManager->settingsRepo->tun_profile_id
         : -1;
@@ -870,6 +877,13 @@ void MainWindow::start_port_bound_profiles(const QList<int>& profileIds) {
         ? Configs::dataManager->settingsRepo->system_proxy_profile_id
         : -1;
     const QString startLabel = current_combined_mode_label(profiles);
+
+    MW_show_log(QString("Combined mode request: tun=%1 tun_profile=%2 system_proxy=%3 system_proxy_profile=%4 port_bound_profiles=%5")
+                    .arg(Configs::dataManager->settingsRepo->spmode_vpn ? "on" : "off")
+                    .arg(tunProfileId)
+                    .arg(Configs::dataManager->settingsRepo->spmode_system_proxy ? "on" : "off")
+                    .arg(systemProxyProfileId)
+                    .arg(profiles.size()));
 
     if (profiles.isEmpty() && tunProfileId < 0 && systemProxyProfileId < 0) {
         MessageBoxWarning(tr("Nothing to start"), tr("No local port mappings or active Tun/System Proxy nodes are selected."));

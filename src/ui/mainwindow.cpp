@@ -1642,6 +1642,7 @@ void MainWindow::set_spmode_vpn(bool enable, bool save) {
         }
     }
 
+    Configs::dataManager->settingsRepo->need_keep_vpn_off = !enable;
     if (save) {
         Configs::dataManager->settingsRepo->remember_spmode.removeAll("vpn");
         if (enable) {
