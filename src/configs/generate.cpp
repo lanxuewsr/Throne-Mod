@@ -51,18 +51,18 @@ namespace Configs {
         };
     }
 
-    QJsonObject buildTunHttpsDnsRecordRejectRule() {
-        // HTTPS/SVCB records advertise HTTP/3 endpoints. In TUN mode, reject
-        // them so browsers prefer TCP HTTPS instead of repeatedly trying QUIC.
+    QJsonObject buildTunHttpsDnsRecordSuppressRule() {
+        // HTTPS/SVCB records advertise HTTP/3 endpoints. Return NOERROR with no
+        // records so browsers fall back to A/AAAA + TCP HTTPS instead of
+        // treating the entire DNS lookup as failed.
         return QJsonObject{
             {"inbound", "tun-in"},
             {"query_type", QJsonArray{
                 QStringLiteral("HTTPS"),
                 QStringLiteral("SVCB"),
             }},
-            {"action", "reject"},
-            {"method", "default"},
-            {"no_drop", true},
+            {"action", "predefined"},
+            {"rcode", "NOERROR"},
         };
     }
 
@@ -509,7 +509,7 @@ namespace Configs {
         }
 
         if (ctx->tunEnabled && !ctx->forTest) {
-            rules += buildTunHttpsDnsRecordRejectRule();
+            rules += buildTunHttpsDnsRecordSuppressRule();
         }
 
         // FakeIP
