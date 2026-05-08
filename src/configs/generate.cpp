@@ -51,21 +51,6 @@ namespace Configs {
         };
     }
 
-    QJsonObject buildTunHttpsDnsRecordSuppressRule() {
-        // HTTPS/SVCB records advertise HTTP/3 endpoints. Return NOERROR with no
-        // records so browsers fall back to A/AAAA + TCP HTTPS instead of
-        // treating the entire DNS lookup as failed.
-        return QJsonObject{
-            {"inbound", "tun-in"},
-            {"query_type", QJsonArray{
-                QStringLiteral("HTTPS"),
-                QStringLiteral("SVCB"),
-            }},
-            {"action", "predefined"},
-            {"rcode", "NOERROR"},
-        };
-    }
-
     void MergeJson(const QJsonObject &custom, QJsonObject &outbound) {
         if (custom.isEmpty()) return;
         for (const auto &key: custom.keys()) {
@@ -506,10 +491,6 @@ namespace Configs {
                             {"answer", QString("* IN AAAA %1").arg(Configs::dataManager->settingsRepo->dns_v6_resp)},
                         };
             }
-        }
-
-        if (ctx->tunEnabled && !ctx->forTest) {
-            rules += buildTunHttpsDnsRecordSuppressRule();
         }
 
         // FakeIP
